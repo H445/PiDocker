@@ -64,6 +64,47 @@ Exit the pi terminal with `Ctrl+C` or type `exit`. The container remains running
 ./launch.sh  # Restart and resume
 ```
 
+## Local LLM Provider Configuration
+
+If you're running local LLM providers like **LMStudio** or **Ollama** on your host machine, use the provider configuration script to add them to pi:
+
+```bash
+./localprovider.sh
+```
+
+On Windows PowerShell:
+
+```powershell
+.\localprovider.ps1
+```
+
+This opens an interactive menu to:
+- **Configure LMStudio** - Add models from LMStudio running on `http://localhost:1234/v1`
+- **Configure Ollama** - Add models from Ollama running on `http://localhost:11434/v1`
+- **View current config** - Display saved provider configurations
+- **Clear all providers** - Remove all custom provider configurations
+
+### How It Works
+
+1. The script polls your running LM provider for available models
+2. You select which models to add (by number)
+3. Configuration is saved to `~/.pi/agent/models.json` inside the container
+4. Models are immediately available in pi
+
+### Important: Host Access from Container
+
+When running providers on your **host machine** (not in a container), use these URLs:
+
+- **Docker Desktop (Windows/Mac)**: `http://host.docker.internal:PORT/v1`
+  - LMStudio: `http://host.docker.internal:1234/v1`
+  - Ollama: `http://host.docker.internal:11434/v1`
+
+- **Linux**: Use your host machine's IP address
+  - LMStudio: `http://<host-ip>:1234/v1`
+  - Ollama: `http://<host-ip>:11434/v1`
+
+The default values in the script use `host.docker.internal`, which works on Docker Desktop.
+
 ## Persistence
 
 All data is stored in a Docker named volume (`pi-agent-data`) mounted to `/root` in the container. This includes:
@@ -72,6 +113,7 @@ All data is stored in a Docker named volume (`pi-agent-data`) mounted to `/root`
 - Session history
 - Installed packages
 - Environment state
+- Local provider configurations
 
 The container runs continuously in the background, even when you exit the interactive session.
 
@@ -154,6 +196,8 @@ Create a cron job for daily backups:
 - **restore.ps1** - PowerShell restore script on Windows
 - **run.sh** - Interactive Bash menu for all management operations
 - **run.ps1** - Interactive PowerShell menu for all management operations
+- **localprovider.sh** - Configures local LLM providers (LMStudio, Ollama)
+- **localprovider.ps1** - PowerShell script for configuring local LLM providers
 - **README.md** - This file
 
 ## Root Access
@@ -183,9 +227,23 @@ Then interact with the agent. Ask it to:
 
 Pi stores configuration in `~/.pi/` inside the container. On first run, pi will prompt you to configure your LLM provider and API key. This is automatically persisted in the named volume.
 
+### Built-in Providers
+
+Pi comes with support for major LLM providers:
+- OpenAI (GPT-4, GPT-3.5)
+- Anthropic (Claude)
+- Google (Gemini)
+- And more...
+
+Configure these through pi's interactive setup when you first launch it.
+
+### Local Providers
+
+To use local models via LMStudio or Ollama, use the `localprovider.sh` / `localprovider.ps1` scripts (see [Local LLM Provider Configuration](#local-llm-provider-configuration) above).
+
 To view or edit config from outside the container:
 ```bash
-docker exec pi-agent cat /root/.pi/config.json
+docker exec pi-agent cat /root/.pi/agent/models.json
 ```
 
 ## Cleanup
