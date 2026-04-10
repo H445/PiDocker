@@ -21,35 +21,7 @@ Run pi-agent in YOLO mode inside an isolated, reproducible Docker environment.
 
 ## Quick Start
 
-### 1. Build the Image
-
-```bash
-./build.sh
-```
-
-On Windows PowerShell:
-
-```powershell
-.\build.ps1
-```
-
-This creates a Docker image named `pi-agent:latest` with all dependencies installed and the coding agent ready to use.
-
-### 2. Launch the Agent
-
-```bash
-./launch.sh
-```
-
-On Windows PowerShell:
-
-```powershell
-.\launch.ps1
-```
-
-This starts an interactive pi session. On first run, it creates a persistent container and named volume. On subsequent runs, it reuses the same container, preserving all state, files, and configurations.
-
-### Optional: Use the Menu Launcher
+Use the management menu to handle everything:
 
 ```bash
 ./run.sh
@@ -61,30 +33,43 @@ On Windows PowerShell:
 .\run.ps1
 ```
 
-This opens an interactive menu for launch/build plus two submenus:
-- **Backup Management**: create, list, restore, and delete backups
-- **Container Management**: stop container, remove container (keep volume), and view status
+This opens an interactive menu with all operations in order:
 
-### 3. Stop the Agent
+- **[1] Launch pi** - Start/resume an interactive pi session
+- **[2] Launch pi with extensions** - Load custom extensions on startup
+- **[3] Build image** - Build/rebuild the Docker image
+- **[4] Provider configuration** - Configure local LLM providers (LMStudio, Ollama)
+- **[5] Backup management** - Create, list, restore, or delete backups
+- **[6] Container management** - Stop, remove, or view container status
 
-Exit the pi terminal with `Ctrl+C` or type `exit`. The container remains running in the background for quick restart.
+### Recommended Workflow
+
+1. **First time**: Run `./run.sh` → Option **[3]** to build the image
+2. **Configure providers** (optional): Option **[4]** to add local LLM models
+3. **Launch pi**: Option **[1]** to start an interactive session
+4. **Login in pi**: Type `/login` and follow prompts to authenticate with your LLM provider
+5. **Start coding**: Begin using pi to read, write, and edit code
+
+### Direct Script Access
+
+You can also run individual scripts directly if needed:
 
 ```bash
-./launch.sh  # Restart and resume
+./build.sh              # Build the Docker image
+./localprovider.sh      # Configure local LLM providers
+./launch.sh             # Launch/resume pi agent
+./backup.sh             # Create a backup
+./restore.sh            # Restore from backup
 ```
+
+On Windows PowerShell, use `.ps1` versions of the scripts.
 
 ## Local LLM Provider Configuration
 
-If you're running local LLM providers like **LMStudio** or **Ollama** on your host machine, use the provider configuration script to add them to pi:
+To configure local LLM providers (LMStudio, Ollama), use the menu option **[4] Provider configuration** in `./run.sh` or `./run.ps1`, or run directly:
 
 ```bash
 ./localprovider.sh
-```
-
-On Windows PowerShell:
-
-```powershell
-.\localprovider.ps1
 ```
 
 This opens an interactive menu to:
@@ -128,11 +113,15 @@ The container runs continuously in the background, even when you exit the intera
 
 ### Stop the Container
 
+Use menu option **[6] Container management** → **[1] Stop container**, or:
+
 ```bash
 docker stop pi-agent
 ```
 
 ### Remove the Container (but keep data)
+
+Use menu option **[6] Container management** → **[2] Remove container**, or:
 
 ```bash
 docker rm pi-agent
@@ -142,43 +131,46 @@ The volume persists. You can recreate the container and your data will be restor
 
 ### View Container Status
 
+Use menu option **[6] Container management** → **[3] Container status**, or:
+
 ```bash
 docker ps -a --filter "name=pi-agent"
 ```
 
 ## Backup and Restore
 
-You can run backup operations directly (`./backup.sh`, `./restore.sh`) or through the `run.sh` / `run.ps1` **Backup Management** submenu.
+Use menu option **[5] Backup management** to create, list, restore, or delete backups.
 
 ### Create a Backup
+
+Menu option **[5]** → **[1] Create backup**, or directly:
 
 ```bash
 ./backup.sh
 ```
 
-Creates a compressed archive in the `backups/` directory with timestamp (e.g., `pi-agent-backup-20250115_143022.tar.gz`).
+Creates a compressed archive in the `backups/` directory with timestamp.
 
 ### List Available Backups
+
+Menu option **[5]** → **[2] List backups**, or:
 
 ```bash
 ./restore.sh
 ```
 
-Shows all available backup files with timestamps.
-
 ### Restore from Backup
+
+Menu option **[5]** → **[3] Restore backup** and select from the list.
+
+Or restore directly:
 
 ```bash
 ./restore.sh backups/pi-agent-backup-20250115_143022.tar.gz
 ```
 
-This will:
-1. Stop the running container (if any)
-2. Remove the old container and volume
-3. Create a new volume from the backup
-4. Recreate the container with restored data
+Then launch again:
 
-Then start it again:
 ```bash
 ./launch.sh
 ```
@@ -195,18 +187,12 @@ Create a cron job for daily backups:
 ## Files
 
 - **Dockerfile** - Builds a Node.js 20 Alpine image with pi coding-agent
-- **build.sh** - Builds the Docker image (`pi-agent:latest`)
-- **build.ps1** - PowerShell build script for the image on Windows
-- **launch.sh** - Launches/resumes persistent pi container
-- **launch.ps1** - PowerShell wrapper for launching/resuming pi on Windows
-- **backup.sh** - Creates timestamped backups of container data
-- **backup.ps1** - PowerShell backup script for container data on Windows
-- **restore.sh** - Restores container from backup
-- **restore.ps1** - PowerShell restore script on Windows
-- **run.sh** - Interactive Bash menu for all management operations
-- **run.ps1** - Interactive PowerShell menu for all management operations
-- **localprovider.sh** - Configures local LLM providers (LMStudio, Ollama)
-- **localprovider.ps1** - PowerShell script for configuring local LLM providers
+- **build.sh / build.ps1** - Builds the Docker image
+- **launch.sh / launch.ps1** - Launches/resumes persistent pi container
+- **backup.sh / backup.ps1** - Creates timestamped backups of container data
+- **restore.sh / restore.ps1** - Restores container from backup
+- **run.sh / run.ps1** - Interactive menu for all management operations
+- **localprovider.sh / localprovider.ps1** - Configures local LLM providers
 - **README.md** - This file
 
 ## Root Access
@@ -219,7 +205,7 @@ The container runs as root with full system access to:
 
 ## Usage Examples
 
-Once inside the container via `./launch.sh`, use pi:
+Once inside the container via menu option **[1] Launch pi**, use pi:
 
 ```
 pi
@@ -234,7 +220,7 @@ Then interact with the agent. Ask it to:
 
 ## Configuration
 
-Pi stores configuration in `~/.pi/` inside the container. On first run, pi will prompt you to configure your LLM provider and API key. This is automatically persisted in the named volume.
+Pi stores configuration in `~/.pi/` inside the container. On first launch, pi will prompt you to configure your LLM provider and API key. This is automatically persisted in the named volume.
 
 ### Built-in Providers
 
@@ -244,13 +230,13 @@ Pi comes with support for major LLM providers:
 - Google (Gemini)
 - And more...
 
-Configure these through pi's interactive setup when you first launch it.
+Configure these through pi's interactive setup when you first launch it, or use `/login` in an active pi session.
 
 ### Local Providers
 
-To use local models via LMStudio or Ollama, use the `localprovider.sh` / `localprovider.ps1` scripts (see [Local LLM Provider Configuration](#local-llm-provider-configuration) above).
+To use local models via LMStudio or Ollama, use menu option **[4] Provider configuration**.
 
-To view or edit config from outside the container:
+To view or edit the config from outside the container:
 ```bash
 docker exec pi-agent cat /root/.pi/agent/models.json
 ```

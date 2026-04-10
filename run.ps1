@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env pwsh
+#!/usr/bin/env pwsh
 # Interactive menu to manage the pi-agent container
 
 $ErrorActionPreference = 'Stop'
@@ -18,7 +18,7 @@ function Show-Menu {
     Write-Host '  [1] Launch pi                (launch.ps1)' -ForegroundColor Green
     Write-Host '  [2] Launch pi with extensions'             -ForegroundColor Green
     Write-Host '  [3] Build image              (build.ps1)'  -ForegroundColor Yellow
-    Write-Host '  [4] Backup data              (backup.ps1)' -ForegroundColor Blue
+    Write-Host '  [4] Provider configuration   (localprovider.ps1)' -ForegroundColor Cyan
     Write-Host '  [5] Backup management'                     -ForegroundColor Magenta
     Write-Host '  [6] Container management'                  -ForegroundColor DarkYellow
     Write-Host '  [Q] Quit'                                  -ForegroundColor DarkGray
@@ -306,7 +306,7 @@ while ($true) {
         '1' { Invoke-Script 'launch.ps1'; break }
         '2' { Invoke-LaunchWithExtensions; break }
         '3' { Invoke-Script 'build.ps1';  break }
-        '4' { Invoke-Script 'backup.ps1'; break }
+        '4' { Invoke-Script 'localprovider.ps1'; break }
         '5' { Invoke-BackupMenu; break }
         '6' { Invoke-ContainerMenu; break }
         'Q' { Write-Host '  Bye.'; exit 0 }

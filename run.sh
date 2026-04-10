@@ -1,4 +1,4 @@
-﻿#!/bin/bash
+#!/bin/bash
 # Interactive menu to manage the pi-agent container
 
 set -uo pipefail
@@ -20,7 +20,7 @@ show_menu() {
     echo "  [1] Launch pi                (launch.sh)"
     echo "  [2] Launch pi with extensions"
     echo "  [3] Build image              (build.sh)"
-    echo "  [4] Backup data              (backup.sh)"
+    echo "  [4] Provider configuration   (localprovider.sh)"
     echo "  [5] Backup management"
     echo "  [6] Container management"
     echo "  [Q] Quit"
@@ -338,7 +338,7 @@ while true; do
         1) invoke_script "launch.sh" ;;
         2) launch_with_extensions ;;
         3) invoke_script "build.sh" ;;
-        4) invoke_script "backup.sh" ;;
+        4) invoke_script "localprovider.sh" ;;
         5) backup_management_menu ;;
         6) container_management_menu ;;
         Q) echo "  Bye."; exit 0 ;;
