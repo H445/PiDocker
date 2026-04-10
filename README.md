@@ -16,6 +16,12 @@ A Docker container setup for [pi](https://shittycodingagent.ai/) - a minimal ter
 ./build.sh
 ```
 
+On Windows PowerShell:
+
+```powershell
+.\build.ps1
+```
+
 This creates a Docker image named `pi-agent:latest` with all dependencies installed and the coding agent ready to use.
 
 ### 2. Launch the Agent
@@ -24,7 +30,27 @@ This creates a Docker image named `pi-agent:latest` with all dependencies instal
 ./launch.sh
 ```
 
+On Windows PowerShell:
+
+```powershell
+.\launch.ps1
+```
+
 This starts an interactive pi session. On first run, it creates a persistent container and named volume. On subsequent runs, it reuses the same container, preserving all state, files, and configurations.
+
+### Optional: Use the Menu Launcher
+
+```bash
+./run.sh
+```
+
+On Windows PowerShell:
+
+```powershell
+.\run.ps1
+```
+
+This opens an interactive menu for build, launch, launch with extensions, backup, restore, and container management actions.
 
 ### 3. Stop the Agent
 
@@ -113,9 +139,15 @@ Create a cron job for daily backups:
 
 - **Dockerfile** - Builds a Node.js 20 Alpine image with pi coding-agent
 - **build.sh** - Builds the Docker image (`pi-agent:latest`)
+- **build.ps1** - PowerShell build script for the image on Windows
 - **launch.sh** - Launches/resumes persistent pi container
+- **launch.ps1** - PowerShell wrapper for launching/resuming pi on Windows
 - **backup.sh** - Creates timestamped backups of container data
+- **backup.ps1** - PowerShell backup script for container data on Windows
 - **restore.sh** - Restores container from backup
+- **restore.ps1** - PowerShell restore script on Windows
+- **run.sh** - Interactive Bash menu for all management operations
+- **run.ps1** - Interactive PowerShell menu for all management operations
 - **README.md** - This file
 
 ## Root Access
