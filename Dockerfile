@@ -7,17 +7,23 @@ RUN apk add --no-cache \
     curl \
     jq \
     python3 \
-    build-base \
-    pkgconf \
-    pixman-dev \
-    cairo-dev \
-    pango-dev \
-    jpeg-dev \
-    giflib-dev \
-    librsvg-dev
+    build-base
 
-# Install pi globally so `pi` is available on PATH.
-RUN npm install -g @mariozechner/pi-coding-agent@latest
+WORKDIR /app
+
+# Clone the pi-mono repository
+RUN git clone https://github.com/badlogic/pi-mono.git /app
+
+# Install dependencies and build the coding-agent
+WORKDIR /app/packages/coding-agent
+RUN npm install
+
+# Build the coding-agent
+RUN npm run build
+
+# Create a symlink so 'pi' is available globally
+RUN ln -s /app/packages/coding-agent/dist/cli.js /usr/local/bin/pi && \
+    chmod +x /usr/local/bin/pi
 
 # Set working directory to root for agent access
 WORKDIR /root
