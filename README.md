@@ -1,8 +1,15 @@
 # Pi Coding Agent Docker Container
 
-**Why this exists:** Run pi-agent in YOLO mode inside an isolated, reproducible Docker environment.
+**What this is:** A containerized, reproducible development environment for the pi coding agent—an AI-powered tool that reads, writes, and modifies code with near-complete autonomy.
 
-This project provides a containerized setup that keeps pi-agent contained and easy to manage.
+**Why this exists:** Pi is powerful but needs careful setup and isolation. This project wraps pi in Docker to provide:
+- **Reproducible environment** - Consistent setup across machines
+- **Safe experimentation** - Isolated container keeps your system clean
+- **Easy persistence** - Named volume preserves all state and configurations
+- **Quick backups** - Built-in backup/restore for your work
+- **Local LLM support** - Use local models via LMStudio or Ollama alongside cloud APIs
+
+Run pi-agent in YOLO mode inside an isolated, reproducible Docker environment.
 
 ## Prerequisites
 
@@ -258,8 +265,18 @@ docker volume rm pi-agent-data
 
 Backups in the `backups/` directory remain and can be used to restore later.
 
-## Links
+## Links & Credits
 
-- [pi Documentation](https://pi.dev)
-- [GitHub Repository](https://github.com/badlogic/pi-mono)
-- [Discord Community](https://discord.com/invite/3cU7Bz4UPx)
+### About Pi
+
+Pi is an AI coding agent that can read, write, edit, and understand code with remarkable autonomy. It's built by the incredible team at [badlogic](https://github.com/badlogic).
+
+- **GitHub**: [pi-mono](https://github.com/badlogic/pi-mono) - The full monorepo with all pi packages
+- **Website**: [shittycodingagent.ai](https://shittycodingagent.ai/) - Learn more about pi's capabilities
+- **Discord Community**: [badlogic Discord](https://discord.com/invite/3cU7Bz4UPx) - Chat with the creator and community
+
+### This Project
+
+This Docker wrapper is a community contribution to make pi easier to use and experiment with. It's not affiliated with badlogic, but aims to be a useful companion to the main pi project.
+
+Contributions and feedback welcome!
