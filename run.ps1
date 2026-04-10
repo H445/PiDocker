@@ -39,19 +39,31 @@ function Assert-ContainerRunning {
 }
 # ── extension picker ────────────────────────────────────────────────────────────
 function Select-Extensions {
-    # Gather extensions from user folder then example folder inside the container
+    param([bool]$IncludeExamples = $true)
+
+    # Gather user extensions always; include demo examples only when requested.
     $findUser = docker exec $CONTAINER bash -c "find '$EXT_USER' -maxdepth 2 \( -name '*.ts' -o -name '*.js' -o -name '*.mjs' \) 2>/dev/null | sort" 2>$null
-    $findExamples = docker exec $CONTAINER bash -c "find '$EXT_EXAMPLES' -maxdepth 1 \( -name '*.ts' -o -name '*.js' \) 2>/dev/null | sort" 2>$null
     $allPaths = @()
     if ($findUser)     { $allPaths += $findUser    | Where-Object { $_ -ne '' } }
-    if ($findExamples) { $allPaths += $findExamples | Where-Object { $_ -ne '' } }
+    if ($IncludeExamples) {
+        $findExamples = docker exec $CONTAINER bash -c "find '$EXT_EXAMPLES' -maxdepth 1 \( -name '*.ts' -o -name '*.js' \) 2>/dev/null | sort" 2>$null
+        if ($findExamples) { $allPaths += $findExamples | Where-Object { $_ -ne '' } }
+    }
     if (-not $allPaths) {
         Write-Host '  No extension files found in the container.' -ForegroundColor Red
         Write-Host "  User extensions: $EXT_USER" -ForegroundColor DarkGray
-        Write-Host "  Examples:        $EXT_EXAMPLES" -ForegroundColor DarkGray
+        if ($IncludeExamples) {
+            Write-Host "  Examples:        $EXT_EXAMPLES" -ForegroundColor DarkGray
+        } else {
+            Write-Host '  (Demo/example extensions were excluded.)' -ForegroundColor DarkGray
+        }
         return @()
     }
-    Write-Host '  Available extensions  (space = example, * = yours):' -ForegroundColor Cyan
+    if ($IncludeExamples) {
+        Write-Host '  Available extensions  (space = example, * = yours):' -ForegroundColor Cyan
+    } else {
+        Write-Host '  Available extensions  (* = yours):' -ForegroundColor Cyan
+    }
     Write-Host ''
     $i = 1
     foreach ($p in $allPaths) {
@@ -83,7 +95,11 @@ function Select-Extensions {
 # ── launch with extensions ──────────────────────────────────────────────────────
 function Invoke-LaunchWithExtensions {
     if (-not (Assert-ContainerRunning)) { return }
-    $chosen = Select-Extensions
+
+    $raw = (Read-Host '  Include demo/example extensions? (Y/n)').Trim().ToUpper()
+    $includeExamples = $raw -ne 'N'
+
+    $chosen = Select-Extensions -IncludeExamples:$includeExamples
     if (-not $chosen) {
         Write-Host '  No extensions selected. Returning to menu.' -ForegroundColor DarkYellow
         return

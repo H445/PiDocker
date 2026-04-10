@@ -49,11 +49,15 @@ assert_container_running() {
 }
 
 select_extensions() {
+    local include_examples="${1:-yes}"
     SELECTED_EXTENSIONS=()
     local -a all_paths=()
 
     mapfile -t user_paths < <(docker exec "$CONTAINER" bash -lc "find '$EXT_USER' -maxdepth 2 \( -name '*.ts' -o -name '*.js' -o -name '*.mjs' \) 2>/dev/null | sort" 2>/dev/null)
-    mapfile -t example_paths < <(docker exec "$CONTAINER" bash -lc "find '$EXT_EXAMPLES' -maxdepth 1 \( -name '*.ts' -o -name '*.js' \) 2>/dev/null | sort" 2>/dev/null)
+    local -a example_paths=()
+    if [[ "$include_examples" == "yes" ]]; then
+        mapfile -t example_paths < <(docker exec "$CONTAINER" bash -lc "find '$EXT_EXAMPLES' -maxdepth 1 \( -name '*.ts' -o -name '*.js' \) 2>/dev/null | sort" 2>/dev/null)
+    fi
 
     all_paths+=("${user_paths[@]}")
     all_paths+=("${example_paths[@]}")
@@ -66,11 +70,19 @@ select_extensions() {
     if (( ${#filtered[@]} == 0 )); then
         echo "  No extension files found in the container."
         echo "  User extensions: $EXT_USER"
-        echo "  Examples:        $EXT_EXAMPLES"
+        if [[ "$include_examples" == "yes" ]]; then
+            echo "  Examples:        $EXT_EXAMPLES"
+        else
+            echo "  (Demo/example extensions were excluded.)"
+        fi
         return 1
     fi
 
-    echo "  Available extensions (space = example, * = yours):"
+    if [[ "$include_examples" == "yes" ]]; then
+        echo "  Available extensions (space = example, * = yours):"
+    else
+        echo "  Available extensions (* = yours):"
+    fi
     echo
 
     local i=1
@@ -118,7 +130,14 @@ select_extensions() {
 launch_with_extensions() {
     assert_container_running || return 0
 
-    select_extensions
+    read -r -p "  Include demo/example extensions? (Y/n): " include_examples_raw
+    include_examples_raw="${include_examples_raw^^}"
+    local include_examples="yes"
+    if [[ "$include_examples_raw" == "N" ]]; then
+        include_examples="no"
+    fi
+
+    select_extensions "$include_examples"
     if (( ${#SELECTED_EXTENSIONS[@]} == 0 )); then
         echo "  No extensions selected. Returning to menu."
         return 0
