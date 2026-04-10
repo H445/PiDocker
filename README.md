@@ -1,4 +1,14 @@
-# Pi Coding Agent Docker Container
+### Direct Container Shell Access
+
+You can access the container's bash shell directly without launching pi using menu option **[3] Open container shell**. This is useful for:
+- Installing system packages or dependencies
+- Installing pi extensions via `pi /extension install <url>`
+- Inspecting files and directories
+- Running custom scripts or commands
+- Debugging container issues
+- Managing the file system directly
+
+Type `exit` to return to the menu.# Pi Coding Agent Docker Container
 
 **The story:** I recently had a pi-agent nuke itself. I didn't want to go through the hassle of containerizing another one-off that would nuke itself again, so here we are. A ready-to-go Docker containerized pi-agent. Just build, configure, and run. Following the core of pi-agent, it is a complete skeleton—it's up to you to modify it from here.
 
@@ -37,10 +47,11 @@ This opens an interactive menu with all operations in order:
 
 - **[1] Launch pi** - Start/resume an interactive pi session
 - **[2] Launch pi with extensions** - Load custom extensions on startup
-- **[3] Build image** - Build/rebuild the Docker image
-- **[4] Provider configuration** - Configure local LLM providers (LMStudio, Ollama)
-- **[5] Backup management** - Create, list, restore, or delete backups
-- **[6] Container management** - Stop, remove, or view container status
+- **[3] Open container shell** - Open a bash shell in the container without launching pi
+- **[4] Build image** - Build/rebuild the Docker image
+- **[5] Provider configuration** - Configure local LLM providers (LMStudio, Ollama)
+- **[6] Backup management** - Create, list, restore, or delete backups
+- **[7] Container management** - Stop, remove, or view container status
 
 ### Recommended Workflow
 

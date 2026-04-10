@@ -19,10 +19,11 @@ show_menu() {
     echo
     echo "  [1] Launch pi                (launch.sh)"
     echo "  [2] Launch pi with extensions"
-    echo "  [3] Build image              (build.sh)"
-    echo "  [4] Provider configuration   (localprovider.sh)"
-    echo "  [5] Backup management"
-    echo "  [6] Container management"
+    echo "  [3] Open container shell"
+    echo "  [4] Build image              (build.sh)"
+    echo "  [5] Provider configuration   (localprovider.sh)"
+    echo "  [6] Backup management"
+    echo "  [7] Container management"
     echo "  [Q] Quit"
     echo
 }
@@ -41,6 +42,17 @@ assert_container_running() {
         return 1
     fi
     return 0
+}
+
+# ── open container shell ───────────────────────────────────────────────────────
+
+open_container_shell() {
+    assert_container_running || return 0
+
+    echo
+    echo "  Opening bash shell in container (type 'exit' to return to menu)..."
+    echo
+    docker exec -it "$CONTAINER" bash
 }
 
 # ── backup management ──────────────────────────────────────────────────────────
@@ -337,18 +349,19 @@ while true; do
     case "$choice" in
         1) invoke_script "launch.sh" ;;
         2) launch_with_extensions ;;
-        3) invoke_script "build.sh" ;;
-        4) invoke_script "localprovider.sh" ;;
-        5) backup_management_menu ;;
-        6) container_management_menu ;;
+        3) open_container_shell ;;
+        4) invoke_script "build.sh" ;;
+        5) invoke_script "localprovider.sh" ;;
+        6) backup_management_menu ;;
+        7) container_management_menu ;;
         Q) echo "  Bye."; exit 0 ;;
         *) echo "  Unknown option." ;;
     esac
 
     # Pause after output-producing actions so results aren't erased by clear.
-    # Submenus (5, 6) handle their own flow — no extra pause needed.
+    # Submenus (6, 7) handle their own flow — no extra pause needed.
     case "$choice" in
-        5|6|Q) ;;
+        6|7|Q) ;;
         *) echo; read -r -p "  Press Enter to return to menu" ;;
     esac
 done

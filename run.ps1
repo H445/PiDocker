@@ -17,10 +17,11 @@ function Show-Menu {
     Write-Host ''
     Write-Host '  [1] Launch pi                (launch.ps1)' -ForegroundColor Green
     Write-Host '  [2] Launch pi with extensions'             -ForegroundColor Green
-    Write-Host '  [3] Build image              (build.ps1)'  -ForegroundColor Yellow
-    Write-Host '  [4] Provider configuration   (localprovider.ps1)' -ForegroundColor Cyan
-    Write-Host '  [5] Backup management'                     -ForegroundColor Magenta
-    Write-Host '  [6] Container management'                  -ForegroundColor DarkYellow
+    Write-Host '  [3] Open container shell'                  -ForegroundColor Green
+    Write-Host '  [4] Build image              (build.ps1)'  -ForegroundColor Yellow
+    Write-Host '  [5] Provider configuration   (localprovider.ps1)' -ForegroundColor Cyan
+    Write-Host '  [6] Backup management'                     -ForegroundColor Magenta
+    Write-Host '  [7] Container management'                  -ForegroundColor DarkYellow
     Write-Host '  [Q] Quit'                                  -ForegroundColor DarkGray
     Write-Host ''
 }
@@ -43,6 +44,17 @@ function Assert-ContainerRunning {
         return $false
     }
     return $true
+}
+
+# ── open container shell ───────────────────────────────────────────────────────
+
+function Invoke-OpenContainerShell {
+    if (-not (Assert-ContainerRunning)) { return }
+
+    Write-Host ''
+    Write-Host "  Opening bash shell in container (type 'exit' to return to menu)..." -ForegroundColor DarkCyan
+    Write-Host ''
+    docker exec -it $CONTAINER bash
 }
 
 # ── backup management ──────────────────────────────────────────────────────────
@@ -305,17 +317,18 @@ while ($true) {
     switch ($choice) {
         '1' { Invoke-Script 'launch.ps1'; break }
         '2' { Invoke-LaunchWithExtensions; break }
-        '3' { Invoke-Script 'build.ps1';  break }
-        '4' { Invoke-Script 'localprovider.ps1'; break }
-        '5' { Invoke-BackupMenu; break }
-        '6' { Invoke-ContainerMenu; break }
+        '3' { Invoke-OpenContainerShell; break }
+        '4' { Invoke-Script 'build.ps1';  break }
+        '5' { Invoke-Script 'localprovider.ps1'; break }
+        '6' { Invoke-BackupMenu; break }
+        '7' { Invoke-ContainerMenu; break }
         'Q' { Write-Host '  Bye.'; exit 0 }
         default { Write-Host '  Unknown option.' -ForegroundColor Red; break }
     }
 
     # Pause after output-producing actions so results aren't erased by Clear-Host.
-    # Submenus (5, 6) handle their own flow — no extra pause needed.
-    if ($choice -notin '5','6','Q') {
+    # Submenus (6, 7) handle their own flow — no extra pause needed.
+    if ($choice -notin '6','7','Q') {
         Write-Host ''
         Read-Host '  Press Enter to return to menu'
     }
