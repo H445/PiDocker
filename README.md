@@ -1,6 +1,8 @@
 # Pi Coding Agent Docker Container
 
-A Docker container setup for [pi](https://shittycodingagent.ai/) - a minimal terminal coding harness powered by AI.
+**Why this exists:** Run pi-agent in YOLO mode inside an isolated, reproducible Docker environment.
+
+This project provides a containerized setup that keeps pi-agent contained and easy to manage.
 
 ## Prerequisites
 
@@ -180,27 +182,6 @@ Pi stores configuration in `~/.pi/` inside the container. On first run, pi will 
 To view or edit config from outside the container:
 ```bash
 docker exec pi-agent cat /root/.pi/config.json
-```
-
-## Troubleshooting
-
-**Build fails**: Ensure Docker daemon is running and you have internet access.
-
-**Container won't start**: 
-```bash
-docker logs pi-agent
-```
-
-**Lost data**: Backups are stored in the `backups/` directory. Use `./restore.sh` to recover.
-
-**Volume is full**: Check volume usage with:
-```bash
-docker volume inspect pi-agent-data
-```
-
-**Docker socket permission denied**: The container runs as root and should have access. If issues persist, verify the socket is accessible:
-```bash
-docker exec pi-agent ls -la /var/run/docker.sock
 ```
 
 ## Cleanup
