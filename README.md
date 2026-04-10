@@ -52,7 +52,9 @@ On Windows PowerShell:
 .\run.ps1
 ```
 
-This opens an interactive menu for build, launch, launch with extensions, backup, restore, and container management actions.
+This opens an interactive menu for launch/build plus two submenus:
+- **Backup Management**: create, list, restore, and delete backups
+- **Container Management**: stop container, remove container (keep volume), and view status
 
 ### 3. Stop the Agent
 
@@ -94,6 +96,8 @@ docker ps -a --filter "name=pi-agent"
 ```
 
 ## Backup and Restore
+
+You can run backup operations directly (`./backup.sh`, `./restore.sh`) or through the `run.sh` / `run.ps1` **Backup Management** submenu.
 
 ### Create a Backup
 

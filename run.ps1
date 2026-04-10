@@ -1,34 +1,41 @@
 ﻿#!/usr/bin/env pwsh
-# Interactive menu to run pi-agent management scripts
+# Interactive menu to manage the pi-agent container
+
 $ErrorActionPreference = 'Stop'
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$CONTAINER  = 'pi-agent'
+$scriptDir    = Split-Path -Parent $MyInvocation.MyCommand.Path
+$CONTAINER    = 'pi-agent'
 $EXT_EXAMPLES = '/usr/local/lib/node_modules/@mariozechner/pi-coding-agent/examples/extensions'
 $EXT_USER     = '/root/.pi/extensions'
+
 # ── helpers ────────────────────────────────────────────────────────────────────
+
 function Show-Menu {
     Clear-Host
     Write-Host ''
     Write-Host '  pi-agent  --  management menu' -ForegroundColor Cyan
     Write-Host '  ================================' -ForegroundColor DarkCyan
     Write-Host ''
-    Write-Host '  [1]  Launch pi                 (launch.ps1)'  -ForegroundColor Green
-    Write-Host '  [2]  Launch pi with extensions              '  -ForegroundColor Green
-    Write-Host '  [3]  Build image               (build.ps1)'   -ForegroundColor Yellow
-    Write-Host '  [4]  Backup data               (backup.ps1)'  -ForegroundColor Blue
-    Write-Host '  [5]  Restore data              (restore.ps1)' -ForegroundColor Magenta
-    Write-Host '  [6]  Stop container'                          -ForegroundColor DarkYellow
-    Write-Host '  [7]  Remove container'                        -ForegroundColor DarkYellow
-    Write-Host '  [8]  Container status'                        -ForegroundColor White
-    Write-Host '  [Q]  Quit'                                    -ForegroundColor DarkGray
+    Write-Host '  [1] Launch pi                (launch.ps1)' -ForegroundColor Green
+    Write-Host '  [2] Launch pi with extensions'             -ForegroundColor Green
+    Write-Host '  [3] Build image              (build.ps1)'  -ForegroundColor Yellow
+    Write-Host '  [4] Backup data              (backup.ps1)' -ForegroundColor Blue
+    Write-Host '  [5] Backup management'                     -ForegroundColor Magenta
+    Write-Host '  [6] Container management'                  -ForegroundColor DarkYellow
+    Write-Host '  [Q] Quit'                                  -ForegroundColor DarkGray
     Write-Host ''
 }
+
 function Invoke-Script {
     param([string]$Name, [string[]]$ScriptArgs)
     $path = Join-Path $scriptDir $Name
     Push-Location $scriptDir
-    try { & $path @ScriptArgs } finally { Pop-Location }
+    try {
+        if ($ScriptArgs) { & $path @ScriptArgs }
+        else             { & $path }
+    }
+    finally { Pop-Location }
 }
+
 function Assert-ContainerRunning {
     $state = docker inspect -f '{{.State.Running}}' $CONTAINER 2>$null
     if ($state -ne 'true') {
@@ -37,18 +44,183 @@ function Assert-ContainerRunning {
     }
     return $true
 }
-# ── extension picker ────────────────────────────────────────────────────────────
+
+# ── backup management ──────────────────────────────────────────────────────────
+
+function Get-BackupFiles {
+    $backupDir = Join-Path $scriptDir 'backups'
+    if (-not (Test-Path $backupDir)) { return @() }
+    return Get-ChildItem -Path $backupDir -Filter '*.tar.gz' -ErrorAction SilentlyContinue |
+           Sort-Object LastWriteTime -Descending
+}
+
+function Show-BackupList {
+    param([System.IO.FileInfo[]]$Files)
+
+    if (-not $Files) {
+        Write-Host '  No backups found in backups/' -ForegroundColor Red
+        return
+    }
+
+    Write-Host '  Available backups:' -ForegroundColor Cyan
+    $i = 1
+    foreach ($f in $Files) {
+        $kb    = [math]::Round($f.Length / 1KB, 1)
+        $stamp = $f.LastWriteTime.ToString('yyyy-MM-dd HH:mm')
+        Write-Host ("  [{0}] {1}  ({2} KB, {3})" -f $i, $f.Name, $kb, $stamp)
+        $i++
+    }
+}
+
+function Invoke-RestoreBackup {
+    $files = Get-BackupFiles
+    Show-BackupList -Files $files
+    if (-not $files) { return }
+
+    Write-Host ''
+    $sel = (Read-Host '  Enter number (or path), blank to cancel').Trim()
+    if ($sel -eq '') { return }
+
+    if ($sel -match '^\d+$') {
+        $idx = [int]$sel - 1
+        if ($idx -ge 0 -and $idx -lt $files.Count) {
+            Invoke-Script 'restore.ps1' @($files[$idx].FullName)
+        } else {
+            Write-Host '  Invalid selection.' -ForegroundColor Red
+        }
+    } else {
+        Invoke-Script 'restore.ps1' @($sel)
+    }
+}
+
+function Invoke-DeleteBackup {
+    $files = Get-BackupFiles
+    Show-BackupList -Files $files
+    if (-not $files) { return }
+
+    Write-Host ''
+    $sel = (Read-Host '  Enter number (or path) to delete, blank to cancel').Trim()
+    if ($sel -eq '') { return }
+
+    $target = $null
+    if ($sel -match '^\d+$') {
+        $idx = [int]$sel - 1
+        if ($idx -ge 0 -and $idx -lt $files.Count) {
+            $target = $files[$idx].FullName
+        } else {
+            Write-Host '  Invalid selection.' -ForegroundColor Red
+            return
+        }
+    } else {
+        $target = $sel
+    }
+
+    if (-not (Test-Path $target)) {
+        Write-Host "  Backup not found: $target" -ForegroundColor Red
+        return
+    }
+
+    $name = Split-Path $target -Leaf
+    $confirm = (Read-Host "  Delete '$name'? (y/N)").Trim().ToUpper()
+    if ($confirm -ne 'Y') {
+        Write-Host '  Delete canceled.' -ForegroundColor DarkYellow
+        return
+    }
+
+    Remove-Item -Path $target -Force
+    Write-Host '  Backup deleted.' -ForegroundColor Green
+}
+
+function Show-BackupMenu {
+    Write-Host ''
+    Write-Host '  Backup Management' -ForegroundColor Cyan
+    Write-Host '  =================' -ForegroundColor DarkCyan
+    Write-Host ''
+    Write-Host '  [1] Create backup  (backup.ps1)'
+    Write-Host '  [2] List backups'
+    Write-Host '  [3] Restore backup (restore.ps1)'
+    Write-Host '  [4] Delete backup'
+    Write-Host ''
+    Write-Host '  Press Enter to go back.' -ForegroundColor DarkGray
+    Write-Host ''
+}
+
+function Invoke-BackupMenu {
+    while ($true) {
+        Show-BackupMenu
+        $choice = (Read-Host '  Select an option').Trim().ToUpper()
+        if ($choice -eq '') { return }
+        Write-Host ''
+        switch ($choice) {
+            '1' { Invoke-Script 'backup.ps1' }
+            '2' { Show-BackupList -Files (Get-BackupFiles) }
+            '3' { Invoke-RestoreBackup }
+            '4' { Invoke-DeleteBackup }
+            default { Write-Host '  Unknown option.' -ForegroundColor Red }
+        }
+        Write-Host ''
+        Read-Host '  Press Enter to continue'
+    }
+}
+
+# ── container management ───────────────────────────────────────────────────────
+
+function Show-ContainerMenu {
+    Write-Host ''
+    Write-Host '  Container Management' -ForegroundColor Cyan
+    Write-Host '  ====================' -ForegroundColor DarkCyan
+    Write-Host ''
+    Write-Host '  [1] Stop container'
+    Write-Host '  [2] Remove container (keep volume)'
+    Write-Host '  [3] Container status'
+    Write-Host ''
+    Write-Host '  Press Enter to go back.' -ForegroundColor DarkGray
+    Write-Host ''
+}
+
+function Invoke-ContainerMenu {
+    while ($true) {
+        Show-ContainerMenu
+        $choice = (Read-Host '  Select an option').Trim().ToUpper()
+        if ($choice -eq '') { return }
+        Write-Host ''
+        switch ($choice) {
+            '1' {
+                Write-Host '  Stopping pi-agent container...'
+                docker stop $CONTAINER
+            }
+            '2' {
+                $confirm = (Read-Host '  Remove container? Data volume is preserved. (y/N)').Trim().ToUpper()
+                if ($confirm -eq 'Y') { docker rm -f $CONTAINER }
+            }
+            '3' {
+                Write-Host '--- docker ps ---' -ForegroundColor DarkCyan
+                docker ps -a --filter "name=$CONTAINER"
+                Write-Host ''
+                Write-Host '--- docker volume ---' -ForegroundColor DarkCyan
+                docker volume ls --filter 'name=pi-agent-data'
+            }
+            default { Write-Host '  Unknown option.' -ForegroundColor Red }
+        }
+        Write-Host ''
+        Read-Host '  Press Enter to continue'
+    }
+}
+
+# ── extension picker ───────────────────────────────────────────────────────────
+
 function Select-Extensions {
     param([bool]$IncludeExamples = $true)
 
-    # Gather user extensions always; include demo examples only when requested.
     $findUser = docker exec $CONTAINER bash -c "find '$EXT_USER' -maxdepth 2 \( -name '*.ts' -o -name '*.js' -o -name '*.mjs' \) 2>/dev/null | sort" 2>$null
     $allPaths = @()
-    if ($findUser)     { $allPaths += $findUser    | Where-Object { $_ -ne '' } }
+    if ($findUser) { $allPaths += $findUser | Where-Object { $_ -ne '' } }
+
     if ($IncludeExamples) {
         $findExamples = docker exec $CONTAINER bash -c "find '$EXT_EXAMPLES' -maxdepth 1 \( -name '*.ts' -o -name '*.js' \) 2>/dev/null | sort" 2>$null
         if ($findExamples) { $allPaths += $findExamples | Where-Object { $_ -ne '' } }
     }
+
     if (-not $allPaths) {
         Write-Host '  No extension files found in the container.' -ForegroundColor Red
         Write-Host "  User extensions: $EXT_USER" -ForegroundColor DarkGray
@@ -59,12 +231,14 @@ function Select-Extensions {
         }
         return @()
     }
+
     if ($IncludeExamples) {
-        Write-Host '  Available extensions  (space = example, * = yours):' -ForegroundColor Cyan
+        Write-Host '  Available extensions (space = example, * = yours):' -ForegroundColor Cyan
     } else {
-        Write-Host '  Available extensions  (* = yours):' -ForegroundColor Cyan
+        Write-Host '  Available extensions (* = yours):' -ForegroundColor Cyan
     }
     Write-Host ''
+
     $i = 1
     foreach ($p in $allPaths) {
         $label = if ($p -like "$EXT_USER*") { '* ' } else { '  ' }
@@ -75,12 +249,14 @@ function Select-Extensions {
         Write-Host ("  [{0,2}] {1}{2}  {3}" -f $i, $label, $name, $rel) -ForegroundColor White
         $i++
     }
+
     Write-Host ''
     Write-Host '  Enter numbers to load, separated by spaces or commas (e.g. 1 3 5).' -ForegroundColor DarkGray
     Write-Host '  Press Enter with no input to cancel.' -ForegroundColor DarkGray
     Write-Host ''
     $raw = (Read-Host '  Selection').Trim()
     if (-not $raw) { return @() }
+
     $indices = $raw -split '[\s,]+' | Where-Object { $_ -match '^\d+$' } | ForEach-Object { [int]$_ }
     $chosen  = @()
     foreach ($idx in $indices) {
@@ -92,7 +268,9 @@ function Select-Extensions {
     }
     return $chosen
 }
-# ── launch with extensions ──────────────────────────────────────────────────────
+
+# ── launch with extensions ─────────────────────────────────────────────────────
+
 function Invoke-LaunchWithExtensions {
     if (-not (Assert-ContainerRunning)) { return }
 
@@ -104,76 +282,41 @@ function Invoke-LaunchWithExtensions {
         Write-Host '  No extensions selected. Returning to menu.' -ForegroundColor DarkYellow
         return
     }
+
     Write-Host ''
     Write-Host '  Loading extensions:' -ForegroundColor Cyan
     foreach ($p in $chosen) { Write-Host "    $p" }
     Write-Host ''
-    # Build --extension flags
+
     $extArgs = @()
     foreach ($p in $chosen) { $extArgs += '--extension'; $extArgs += $p }
+
     Write-Host '  Launching pi in container...'
     docker exec -it $CONTAINER pi @extArgs
 }
-# ── main loop ───────────────────────────────────────────────────────────────────
+
+# ── main loop ──────────────────────────────────────────────────────────────────
+
 while ($true) {
     Show-Menu
     $choice = (Read-Host '  Select an option').Trim().ToUpper()
     Write-Host ''
+
     switch ($choice) {
         '1' { Invoke-Script 'launch.ps1'; break }
         '2' { Invoke-LaunchWithExtensions; break }
         '3' { Invoke-Script 'build.ps1';  break }
         '4' { Invoke-Script 'backup.ps1'; break }
-        '5' {
-            $backupDir = Join-Path $scriptDir 'backups'
-            $files = Get-ChildItem -Path $backupDir -Filter '*.tar.gz' -ErrorAction SilentlyContinue |
-                     Sort-Object Name
-            if (-not $files) {
-                Write-Host '  No backups found in backups/' -ForegroundColor Red
-            } else {
-                Write-Host '  Available backups:' -ForegroundColor Cyan
-                $i = 1
-                foreach ($f in $files) {
-                    $kb = [math]::Round($f.Length / 1KB, 1)
-                    Write-Host "  [$i] $($f.Name)  ($kb KB)"
-                    $i++
-                }
-                Write-Host ''
-                $sel = (Read-Host '  Enter number (or path), blank to cancel').Trim()
-                if ($sel -ne '') {
-                    if ($sel -match '^\d+$') {
-                        $idx = [int]$sel - 1
-                        if ($idx -ge 0 -and $idx -lt $files.Count) {
-                            Invoke-Script 'restore.ps1' @($files[$idx].FullName)
-                        } else { Write-Host '  Invalid selection.' -ForegroundColor Red }
-                    } else {
-                        Invoke-Script 'restore.ps1' @($sel)
-                    }
-                }
-            }
-            break
-        }
-        '6' {
-            Write-Host '  Stopping pi-agent container...'
-            docker stop $CONTAINER
-            break
-        }
-        '7' {
-            $confirm = (Read-Host '  Remove container pi-agent? Data volume is preserved. (y/N)').Trim().ToUpper()
-            if ($confirm -eq 'Y') { docker rm -f $CONTAINER }
-            break
-        }
-        '8' {
-            Write-Host '--- docker ps ---' -ForegroundColor DarkCyan
-            docker ps -a --filter "name=$CONTAINER"
-            Write-Host ''
-            Write-Host '--- docker volume ---' -ForegroundColor DarkCyan
-            docker volume ls --filter 'name=pi-agent-data'
-            break
-        }
+        '5' { Invoke-BackupMenu; break }
+        '6' { Invoke-ContainerMenu; break }
         'Q' { Write-Host '  Bye.'; exit 0 }
-        default { Write-Host '  Unknown option.' -ForegroundColor Red }
+        default { Write-Host '  Unknown option.' -ForegroundColor Red; break }
     }
-    Write-Host ''
-    Read-Host '  Press Enter to return to menu'
+
+    # Pause after output-producing actions so results aren't erased by Clear-Host.
+    # Submenus (5, 6) handle their own flow — no extra pause needed.
+    if ($choice -notin '5','6','Q') {
+        Write-Host ''
+        Read-Host '  Press Enter to return to menu'
+    }
 }

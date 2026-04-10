@@ -9,27 +9,22 @@ EXT_EXAMPLES="/usr/local/lib/node_modules/@mariozechner/pi-coding-agent/examples
 EXT_USER="/root/.pi/extensions"
 SELECTED_EXTENSIONS=()
 
+# ── helpers ────────────────────────────────────────────────────────────────────
+
 show_menu() {
     clear
     echo
     echo "  pi-agent  --  management menu"
     echo "  ================================"
     echo
-    echo "  [1] Launch pi                 (launch.sh)"
+    echo "  [1] Launch pi                (launch.sh)"
     echo "  [2] Launch pi with extensions"
-    echo "  [3] Build image               (build.sh)"
-    echo "  [4] Backup data               (backup.sh)"
-    echo "  [5] Restore data              (restore.sh)"
-    echo "  [6] Stop container"
-    echo "  [7] Remove container"
-    echo "  [8] Container status"
+    echo "  [3] Build image              (build.sh)"
+    echo "  [4] Backup data              (backup.sh)"
+    echo "  [5] Backup management"
+    echo "  [6] Container management"
     echo "  [Q] Quit"
     echo
-}
-
-pause_menu() {
-    echo
-    read -r -p "  Press Enter to return to menu"
 }
 
 invoke_script() {
@@ -48,15 +43,189 @@ assert_container_running() {
     return 0
 }
 
+# ── backup management ──────────────────────────────────────────────────────────
+
+get_backup_files() {
+    local backup_dir="$SCRIPT_DIR/backups"
+    [[ -d "$backup_dir" ]] || return 0
+    find "$backup_dir" -maxdepth 1 -type f -name '*.tar.gz' -print 2>/dev/null | sort -r
+}
+
+show_backup_list() {
+    mapfile -t files < <(get_backup_files)
+    if (( ${#files[@]} == 0 )); then
+        echo "  No backups found in backups/"
+        return 1
+    fi
+
+    echo "  Available backups:"
+    local i=1
+    local f bytes size_kb modified
+    for f in "${files[@]}"; do
+        bytes="$(stat -c %s "$f" 2>/dev/null || echo 0)"
+        size_kb=$(awk "BEGIN {printf \"%.1f\", $bytes / 1024}")
+        modified=$(date -r "$f" "+%Y-%m-%d %H:%M" 2>/dev/null \
+                || stat -c %y "$f" 2>/dev/null | cut -d'.' -f1)
+        printf "  [%d] %s  (%s KB, %s)\n" "$i" "$(basename "$f")" "$size_kb" "$modified"
+        ((i++))
+    done
+    return 0
+}
+
+restore_backup_menu() {
+    show_backup_list || return 0
+
+    echo
+    read -r -p "  Enter number (or path), blank to cancel: " sel
+    [[ -z "$sel" ]] && return 0
+
+    mapfile -t files < <(get_backup_files)
+    if [[ "$sel" =~ ^[0-9]+$ ]]; then
+        local idx=$((sel - 1))
+        if (( idx >= 0 && idx < ${#files[@]} )); then
+            invoke_script "restore.sh" "${files[$idx]}"
+        else
+            echo "  Invalid selection."
+        fi
+    else
+        invoke_script "restore.sh" "$sel"
+    fi
+}
+
+delete_backup_menu() {
+    show_backup_list || return 0
+
+    echo
+    read -r -p "  Enter number (or path) to delete, blank to cancel: " sel
+    [[ -z "$sel" ]] && return 0
+
+    local target=""
+    mapfile -t files < <(get_backup_files)
+    if [[ "$sel" =~ ^[0-9]+$ ]]; then
+        local idx=$((sel - 1))
+        if (( idx >= 0 && idx < ${#files[@]} )); then
+            target="${files[$idx]}"
+        else
+            echo "  Invalid selection."
+            return 0
+        fi
+    else
+        target="$sel"
+    fi
+
+    if [[ ! -f "$target" ]]; then
+        echo "  Backup not found: $target"
+        return 0
+    fi
+
+    local name
+    name="$(basename "$target")"
+    read -r -p "  Delete '$name'? (y/N): " confirm
+    if [[ "${confirm^^}" != "Y" ]]; then
+        echo "  Delete canceled."
+        return 0
+    fi
+
+    rm -f -- "$target"
+    echo "  Backup deleted."
+}
+
+show_backup_menu() {
+    echo
+    echo "  Backup Management"
+    echo "  ================="
+    echo
+    echo "  [1] Create backup  (backup.sh)"
+    echo "  [2] List backups"
+    echo "  [3] Restore backup (restore.sh)"
+    echo "  [4] Delete backup"
+    echo
+    echo "  Press Enter to go back."
+    echo
+}
+
+backup_management_menu() {
+    while true; do
+        show_backup_menu
+        read -r -p "  Select an option: " choice
+        [[ -z "$choice" ]] && return 0
+        choice="${choice^^}"
+        echo
+
+        case "$choice" in
+            1) invoke_script "backup.sh" ;;
+            2) show_backup_list ;;
+            3) restore_backup_menu ;;
+            4) delete_backup_menu ;;
+            *) echo "  Unknown option." ;;
+        esac
+
+        echo
+        read -r -p "  Press Enter to continue"
+    done
+}
+
+# ── container management ───────────────────────────────────────────────────────
+
+show_container_menu() {
+    echo
+    echo "  Container Management"
+    echo "  ===================="
+    echo
+    echo "  [1] Stop container"
+    echo "  [2] Remove container (keep volume)"
+    echo "  [3] Container status"
+    echo
+    echo "  Press Enter to go back."
+    echo
+}
+
+container_management_menu() {
+    while true; do
+        show_container_menu
+        read -r -p "  Select an option: " choice
+        [[ -z "$choice" ]] && return 0
+        choice="${choice^^}"
+        echo
+
+        case "$choice" in
+            1)
+                echo "  Stopping pi-agent container..."
+                docker stop "$CONTAINER"
+                ;;
+            2)
+                read -r -p "  Remove container? Data volume is preserved. (y/N): " confirm
+                [[ "${confirm^^}" == "Y" ]] && docker rm -f "$CONTAINER"
+                ;;
+            3)
+                echo "--- docker ps ---"
+                docker ps -a --filter "name=$CONTAINER"
+                echo
+                echo "--- docker volume ---"
+                docker volume ls --filter "name=pi-agent-data"
+                ;;
+            *) echo "  Unknown option." ;;
+        esac
+
+        echo
+        read -r -p "  Press Enter to continue"
+    done
+}
+
+# ── extension picker ───────────────────────────────────────────────────────────
+
 select_extensions() {
     local include_examples="${1:-yes}"
     SELECTED_EXTENSIONS=()
     local -a all_paths=()
 
-    mapfile -t user_paths < <(docker exec "$CONTAINER" bash -lc "find '$EXT_USER' -maxdepth 2 \( -name '*.ts' -o -name '*.js' -o -name '*.mjs' \) 2>/dev/null | sort" 2>/dev/null)
+    mapfile -t user_paths < <(docker exec "$CONTAINER" bash -lc \
+        "find '$EXT_USER' -maxdepth 2 \( -name '*.ts' -o -name '*.js' -o -name '*.mjs' \) 2>/dev/null | sort" 2>/dev/null)
+
     local -a example_paths=()
     if [[ "$include_examples" == "yes" ]]; then
-        mapfile -t example_paths < <(docker exec "$CONTAINER" bash -lc "find '$EXT_EXAMPLES' -maxdepth 1 \( -name '*.ts' -o -name '*.js' \) 2>/dev/null | sort" 2>/dev/null)
+        mapfile -t example_paths < <(docker exec "$CONTAINER" bash -lc \
+            "find '$EXT_EXAMPLES' -maxdepth 1 \( -name '*.ts' -o -name '*.js' \) 2>/dev/null | sort" 2>/dev/null)
     fi
 
     all_paths+=("${user_paths[@]}")
@@ -104,7 +273,6 @@ select_extensions() {
     echo
     echo "  Enter numbers to load, separated by spaces or commas (e.g. 1 3 5)."
     read -r -p "  Selection (blank to cancel): " raw
-
     [[ -z "$raw" ]] && return 1
 
     raw="${raw//,/ }"
@@ -127,15 +295,15 @@ select_extensions() {
     return 0
 }
 
+# ── launch with extensions ─────────────────────────────────────────────────────
+
 launch_with_extensions() {
     assert_container_running || return 0
 
     read -r -p "  Include demo/example extensions? (Y/n): " include_examples_raw
     include_examples_raw="${include_examples_raw^^}"
     local include_examples="yes"
-    if [[ "$include_examples_raw" == "N" ]]; then
-        include_examples="no"
-    fi
+    [[ "$include_examples_raw" == "N" ]] && include_examples="no"
 
     select_extensions "$include_examples"
     if (( ${#SELECTED_EXTENSIONS[@]} == 0 )); then
@@ -158,40 +326,7 @@ launch_with_extensions() {
     docker exec -it "$CONTAINER" pi "${ext_args[@]}"
 }
 
-restore_from_backup_menu() {
-    local backup_dir="$SCRIPT_DIR/backups"
-    shopt -s nullglob
-    local -a files=("$backup_dir"/*.tar.gz)
-    shopt -u nullglob
-
-    if (( ${#files[@]} == 0 )); then
-        echo "  No backups found in backups/"
-        return 0
-    fi
-
-    echo "  Available backups:"
-    local i=1
-    local f
-    for f in "${files[@]}"; do
-        printf "  [%d] %s\n" "$i" "$(basename "$f")"
-        ((i++))
-    done
-
-    echo
-    read -r -p "  Enter number (or path), blank to cancel: " sel
-    [[ -z "$sel" ]] && return 0
-
-    if [[ "$sel" =~ ^[0-9]+$ ]]; then
-        local idx=$((sel - 1))
-        if (( idx >= 0 && idx < ${#files[@]} )); then
-            invoke_script "restore.sh" "${files[$idx]}"
-        else
-            echo "  Invalid selection."
-        fi
-    else
-        invoke_script "restore.sh" "$sel"
-    fi
-}
+# ── main loop ──────────────────────────────────────────────────────────────────
 
 while true; do
     show_menu
@@ -204,24 +339,16 @@ while true; do
         2) launch_with_extensions ;;
         3) invoke_script "build.sh" ;;
         4) invoke_script "backup.sh" ;;
-        5) restore_from_backup_menu ;;
-        6) echo "  Stopping pi-agent container..."; docker stop "$CONTAINER" ;;
-        7)
-            read -r -p "  Remove container pi-agent? Data volume is preserved. (y/N): " confirm
-            [[ "${confirm^^}" == "Y" ]] && docker rm -f "$CONTAINER"
-            ;;
-        8)
-            echo "--- docker ps ---"
-            docker ps -a --filter "name=$CONTAINER"
-            echo
-            echo "--- docker volume ---"
-            docker volume ls --filter "name=pi-agent-data"
-            ;;
+        5) backup_management_menu ;;
+        6) container_management_menu ;;
         Q) echo "  Bye."; exit 0 ;;
         *) echo "  Unknown option." ;;
     esac
 
-    pause_menu
+    # Pause after output-producing actions so results aren't erased by clear.
+    # Submenus (5, 6) handle their own flow — no extra pause needed.
+    case "$choice" in
+        5|6|Q) ;;
+        *) echo; read -r -p "  Press Enter to return to menu" ;;
+    esac
 done
-
-
