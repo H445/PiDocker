@@ -1,5 +1,7 @@
 # Pi Coding Agent Docker Container
 
+**The story:** I recently had a pi-agent nuke itself. I didn't want to go through the hassle of containerizing another one-off that would nuke itself again, so here we are. A ready-to-go Docker containerized pi-agent. Just configure, build, and run. Following the core of pi-agent, it is a complete skeleton—it's up to you to modify it from here.
+
 **What this is:** A containerized, reproducible development environment for the pi coding agent—an AI-powered tool that reads, writes, and modifies code with near-complete autonomy.
 
 **Why this exists:** Pi is powerful but needs careful setup and isolation. This project wraps pi in Docker to provide:
@@ -269,11 +271,11 @@ Backups in the `backups/` directory remain and can be used to restore later.
 
 ### About Pi
 
-Pi is an AI coding agent that can read, write, edit, and understand code with remarkable autonomy. It's built by the incredible team at [badlogic](https://github.com/badlogic).
+Pi is an AI coding agent that can read, write, edit, and understand code with remarkable autonomy. It's the creation of [Mario Zechner](https://github.com/badlogic) at badlogic.
 
 - **GitHub**: [pi-mono](https://github.com/badlogic/pi-mono) - The full monorepo with all pi packages
 - **Website**: [shittycodingagent.ai](https://shittycodingagent.ai/) - Learn more about pi's capabilities
-- **Discord Community**: [badlogic Discord](https://discord.com/invite/3cU7Bz4UPx) - Chat with the creator and community
+- **Discord Community**: [badlogic Discord](https://discord.com/invite/3cU7Bz4UPx) - Chat with Mario and the community
 
 ### This Project
 
