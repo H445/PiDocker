@@ -1,6 +1,6 @@
 # Pi Coding Agent Docker Container
 
-**The story:** I recently had a pi-agent nuke itself. I didn't want to go through the hassle of containerizing another one-off that would nuke itself again, so here we are. A ready-to-go Docker containerized pi-agent. Just configure, build, and run. Following the core of pi-agent, it is a complete skeleton—it's up to you to modify it from here.
+**The story:** I recently had a pi-agent nuke itself. I didn't want to go through the hassle of containerizing another one-off that would nuke itself again, so here we are. A ready-to-go Docker containerized pi-agent. Just build, configure, and run. Following the core of pi-agent, it is a complete skeleton—it's up to you to modify it from here.
 
 **What this is:** A containerized, reproducible development environment for the pi coding agent—an AI-powered tool that reads, writes, and modifies code with near-complete autonomy.
 
@@ -17,7 +17,7 @@ Run pi-agent in YOLO mode inside an isolated, reproducible Docker environment.
 
 - Docker installed and running
 - Bash shell (for scripts)
-- An LLM API key (e.g., OpenAI, Claude, etc.) for pi to function
+- An LLM API key (e.g., OpenAI, Claude, etc.) / Or local LLM provider for pi to function
 
 ## Quick Start
 
