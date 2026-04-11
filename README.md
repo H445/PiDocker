@@ -36,7 +36,7 @@ This opens an interactive management menu:
 | **[1]** Launch pi | Start or resume an interactive pi session |
 | **[2]** Launch pi with extensions | Load custom extensions on startup |
 | **[3]** Open container shell | Open an interactive shell (`bash` or `sh`) without launching pi |
-| **[4]** Build image | Build or rebuild the Docker image |
+| **[4]** Build image | Build or rebuild the Docker image (starts container automatically) |
 | **[5]** Provider configuration | Configure local LLM providers (LMStudio, Ollama) |
 | **[6]** Backup management | Create, list, restore, or delete backups |
 | **[7]** Container management | Stop, remove, or view container status |
@@ -44,7 +44,9 @@ This opens an interactive management menu:
 ### First-Time Setup
 
 1. Run `./run.sh` (or `.\run.ps1`) → **[4]** to build the Docker image
+   - This builds the image and automatically starts the container
 2. *(Optional)* **[5]** to configure local LLM providers
+   - The container must be running to configure providers
 3. **[1]** to launch pi
 4. Inside pi, type `/login` to authenticate with your LLM provider
 5. Start coding!
@@ -54,7 +56,7 @@ This opens an interactive management menu:
 You can also run individual scripts directly:
 
 ```bash
-./build.sh              # Build the Docker image
+./build.sh              # Build the Docker image (starts container automatically)
 ./localprovider.sh      # Configure local LLM providers
 ./launch.sh             # Launch/resume pi agent
 ./backup.sh             # Create a backup
@@ -80,11 +82,21 @@ Once inside the container via **[1] Launch pi**, interact with the agent:
 Use menu option **[3]** to open an interactive shell directly in the container (`bash` when available, otherwise `sh`). This is useful for:
 
 - Installing system packages or dependencies
-- Installing pi extensions via `pi /extension install <url>`
+- Installing pi extensions via `pi install npm:@scope/package-name`
 - Inspecting files and debugging issues
 - Running custom scripts or commands
 
 Type `exit` to return to the menu.
+
+#### Installing Extensions
+
+To install a pi extension from the container shell, use the pi package manager:
+
+```bash
+pi install npm:@foo/pi-tools
+```
+
+Extensions are installed to `~/.pi/extensions/` and will be available for use in pi sessions. You can then load them with option **[2] Launch pi with extensions** from the menu.
 
 ## Configuration
 
@@ -197,7 +209,7 @@ Backups in the `backups/` directory are unaffected and can be used to restore la
 |------|-------------|
 | `Dockerfile` | Node.js 20 Alpine image with native build deps and workspace build steps for pi coding-agent |
 | `run.sh` / `run.ps1` | Interactive management menu |
-| `build.sh` / `build.ps1` | Builds the Docker image |
+| `build.sh` / `build.ps1` | Builds the Docker image and starts the container |
 | `launch.sh` / `launch.ps1` | Launches or resumes the pi container |
 | `localprovider.sh` / `localprovider.ps1` | Configures local LLM providers |
 | `backup.sh` / `backup.ps1` | Creates timestamped backups |
