@@ -7,19 +7,30 @@ RUN apk add --no-cache \
     curl \
     jq \
     python3 \
-    build-base
+    build-base \
+    pkgconf \
+    pixman-dev \
+    cairo-dev \
+    pango-dev \
+    jpeg-dev \
+    giflib-dev \
+    librsvg-dev
 
 WORKDIR /app
 
 # Clone the pi-mono repository
 RUN git clone https://github.com/badlogic/pi-mono.git /app
 
-# Install dependencies and build the coding-agent
-WORKDIR /app/packages/coding-agent
+# Install dependencies from monorepo root (workspace scripts expect root tooling)
+WORKDIR /app
 RUN npm install
 
-# Build the coding-agent
-RUN npm run build
+# Build required workspace packages in dependency order
+WORKDIR /app
+RUN npm --workspace packages/tui run build && \
+    npm --workspace packages/ai run build && \
+    npm --workspace packages/agent run build && \
+    npm --workspace packages/coding-agent run build
 
 # Create a symlink so 'pi' is available globally
 RUN ln -s /app/packages/coding-agent/dist/cli.js /usr/local/bin/pi && \

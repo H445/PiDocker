@@ -27,13 +27,15 @@ A containerized, reproducible development environment for the [pi coding agent](
 .\run.ps1
 ```
 
+On Windows, the PowerShell scripts run Docker commands directly (no WSL requirement).
+
 This opens an interactive management menu:
 
 | Option | Description |
 |--------|-------------|
 | **[1]** Launch pi | Start or resume an interactive pi session |
 | **[2]** Launch pi with extensions | Load custom extensions on startup |
-| **[3]** Open container shell | Open a bash shell without launching pi |
+| **[3]** Open container shell | Open an interactive shell (`bash` or `sh`) without launching pi |
 | **[4]** Build image | Build or rebuild the Docker image |
 | **[5]** Provider configuration | Configure local LLM providers (LMStudio, Ollama) |
 | **[6]** Backup management | Create, list, restore, or delete backups |
@@ -75,7 +77,7 @@ Once inside the container via **[1] Launch pi**, interact with the agent:
 
 ### Container Shell Access
 
-Use menu option **[3]** to open a bash shell directly in the container. This is useful for:
+Use menu option **[3]** to open an interactive shell directly in the container (`bash` when available, otherwise `sh`). This is useful for:
 
 - Installing system packages or dependencies
 - Installing pi extensions via `pi /extension install <url>`
@@ -193,7 +195,7 @@ Backups in the `backups/` directory are unaffected and can be used to restore la
 
 | File | Description |
 |------|-------------|
-| `Dockerfile` | Node.js 20 Alpine image with pi coding-agent |
+| `Dockerfile` | Node.js 20 Alpine image with native build deps and workspace build steps for pi coding-agent |
 | `run.sh` / `run.ps1` | Interactive management menu |
 | `build.sh` / `build.ps1` | Builds the Docker image |
 | `launch.sh` / `launch.ps1` | Launches or resumes the pi container |

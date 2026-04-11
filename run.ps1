@@ -51,10 +51,17 @@ function Assert-ContainerRunning {
 function Invoke-OpenContainerShell {
     if (-not (Assert-ContainerRunning)) { return }
 
+    $shell = docker exec $CONTAINER sh -lc "if command -v bash >/dev/null 2>&1; then echo bash; elif command -v sh >/dev/null 2>&1; then echo sh; fi" 2>$null
+    $shell = ($shell | Select-Object -First 1).Trim()
+    if (-not $shell) {
+        Write-Host "  No interactive shell found in container '$CONTAINER' (tried bash, sh)." -ForegroundColor Red
+        return
+    }
+
     Write-Host ''
-    Write-Host "  Opening bash shell in container (type 'exit' to return to menu)..." -ForegroundColor DarkCyan
+    Write-Host "  Opening $shell shell in container (type 'exit' to return to menu)..." -ForegroundColor DarkCyan
     Write-Host ''
-    docker exec -it $CONTAINER bash
+    docker exec -it $CONTAINER $shell
 }
 
 # ── backup management ──────────────────────────────────────────────────────────
