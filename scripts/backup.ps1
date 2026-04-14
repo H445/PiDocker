@@ -6,15 +6,17 @@ param()
 
 $ErrorActionPreference = 'Stop'
 
+# Load active configuration
+. "$PSScriptRoot\_config.ps1"
+
 $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
 if (-not $dockerCmd) {
     Write-Error "Docker was not found in PATH. Install Docker Desktop and ensure 'docker' is available."
 }
 
-$scriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
-$backupDir  = Join-Path $scriptDir 'backups'
+$backupDir  = Join-Path (Split-Path $PSScriptRoot -Parent) 'backups'
 $timestamp  = Get-Date -Format 'yyyyMMdd_HHmmss'
-$backupFile = "pi-agent-backup-$timestamp.tar.gz"
+$backupFile = "$ContainerName-backup-$timestamp.tar.gz"
 
 # Ensure backup directory exists
 if (-not (Test-Path $backupDir)) {
@@ -22,9 +24,9 @@ if (-not (Test-Path $backupDir)) {
 }
 
 # Check volume exists
-$volume = & docker volume ls --filter 'name=pi-agent-data' --format '{{.Name}}' 2>$null
-if ($volume -notmatch 'pi-agent-data') {
-    Write-Error 'No pi-agent-data volume found. Nothing to backup.'
+$volume = & docker volume ls --format '{{.Name}}' 2>$null | Where-Object { $_ -eq $VolumeName }
+if (-not $volume) {
+    Write-Error "No $VolumeName volume found. Nothing to backup."
 }
 
 Write-Host "Creating backup: backups/$backupFile"
@@ -33,7 +35,7 @@ Write-Host "Creating backup: backups/$backupFile"
 $backupDirUnix = $backupDir -replace '\\', '/' -replace '^([A-Za-z]):', '/$1'
 
 & docker run --rm `
-    -v 'pi-agent-data:/data' `
+    -v "${VolumeName}:/data" `
     -v "${backupDirUnix}:/backup" `
     alpine tar czf "/backup/$backupFile" -C /data .
 

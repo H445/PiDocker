@@ -21,46 +21,62 @@ A containerized, reproducible development environment for the [pi coding agent](
 
 ```bash
 # Linux / macOS
-./run.sh
+./setup.sh        # First-time: creates a profile and builds the image
+./run.sh          # Launches the management menu
 
 # Windows PowerShell
+.\setup.ps1
 .\run.ps1
 ```
 
 On Windows, the PowerShell scripts run Docker commands directly (no WSL requirement).
 
-This opens an interactive management menu:
+### Setup
+
+Run `./setup.sh` (or `.\setup.ps1`) to walk through a step-by-step wizard:
+
+1. **Profile name** — Give your configuration a name (e.g. `default`, `work`, `test`)
+2. **Docker settings** — Image name, tag, container name, volume name (sensible defaults provided)
+3. **Review** — Confirm your settings
+4. **Build** — Build the Docker image and start the container
+
+If profiles already exist, setup shows them and lets you create new ones, switch, edit, delete, or rebuild.
+
+### Run Menu
+
+Run `./run.sh` (or `.\run.ps1`) to open the management menu:
 
 | Option | Description |
 |--------|-------------|
 | **[1]** Launch pi | Start or resume an interactive pi session |
 | **[2]** Launch pi with extensions | Load custom extensions on startup |
 | **[3]** Open container shell | Open an interactive shell (`bash` or `sh`) without launching pi |
-| **[4]** Build image | Build or rebuild the Docker image (starts container automatically) |
-| **[5]** Provider configuration | Configure local LLM providers (LMStudio, Ollama) |
-| **[6]** Backup management | Create, list, restore, or delete backups |
-| **[7]** Container management | Stop, remove, or view container status |
+| **[4]** Provider configuration | Configure local LLM providers (LMStudio, Ollama) |
+| **[5]** Backup management | Create, list, restore, or delete backups |
+| **[6]** Container management | Stop, remove, or view container status |
+| **[7]** Setup / switch profile | Re-run setup to manage profiles |
 
 ### First-Time Setup
 
-1. Run `./run.sh` (or `.\run.ps1`) → **[4]** to build the Docker image
-   - This builds the image and automatically starts the container
-2. *(Optional)* **[5]** to configure local LLM providers
-   - The container must be running to configure providers
-3. **[1]** to launch pi
-4. Inside pi, type `/login` to authenticate with your LLM provider
-5. Start coding!
+1. Run `./setup.sh` (or `.\setup.ps1`) — the wizard walks you through everything
+   - Name your profile, configure Docker settings, review, and build
+   - Building also starts the container automatically
+2. Run `./run.sh` (or `.\run.ps1`) to open the management menu
+3. *(Optional)* **[4]** to configure local LLM providers
+4. **[1]** to launch pi
+5. Inside pi, type `/login` to authenticate with your LLM provider
+6. Start coding!
 
 ### Direct Script Access
 
 You can also run individual scripts directly:
 
 ```bash
-./build.sh              # Build the Docker image (starts container automatically)
-./localprovider.sh      # Configure local LLM providers
-./launch.sh             # Launch/resume pi agent
-./backup.sh             # Create a backup
-./restore.sh            # Restore from backup
+./scripts/build.sh              # Build the Docker image (starts container automatically)
+./scripts/localprovider.sh      # Configure local LLM providers
+./scripts/launch.sh             # Launch/resume pi agent
+./scripts/backup.sh             # Create a backup
+./scripts/restore.sh            # Restore from backup
 ```
 
 On Windows PowerShell, use the `.ps1` versions of each script.
@@ -115,7 +131,7 @@ Configure these through pi's interactive setup on first launch, or use `/login` 
 
 ### Local LLM Providers
 
-Use menu option **[5]** (or run `./localprovider.sh` / `.\localprovider.ps1` directly) to configure local models from LMStudio or Ollama.
+Use menu option **[4]** (or run `./scripts/localprovider.sh` / `.\scripts\localprovider.ps1` directly) to configure local models from LMStudio or Ollama.
 
 The configuration menu lets you:
 
@@ -162,12 +178,12 @@ The container runs in the background even after you exit the interactive session
 
 ## Backup & Restore
 
-Use menu option **[6]** for full backup management, or run the scripts directly:
+Use menu option **[5]** for full backup management, or run the scripts directly:
 
 ```bash
-./backup.sh                                                  # Create a backup
-./restore.sh                                                 # List available backups
-./restore.sh backups/pi-agent-backup-20250115_143022.tar.gz  # Restore a specific backup
+./scripts/backup.sh                                                  # Create a backup
+./scripts/restore.sh                                                 # List available backups
+./scripts/restore.sh backups/pi-agent-backup-20250115_143022.tar.gz  # Restore a specific backup
 ```
 
 Backups are saved as timestamped `.tar.gz` archives in the `backups/` directory.
@@ -181,7 +197,7 @@ Backups are saved as timestamped `.tar.gz` archives in the `backups/` directory.
 
 ## Container Management
 
-Use menu option **[7]**, or manage directly with Docker:
+Use menu option **[6]**, or manage directly with Docker:
 
 ```bash
 docker stop pi-agent                     # Stop the container
@@ -208,12 +224,14 @@ Backups in the `backups/` directory are unaffected and can be used to restore la
 | File | Description |
 |------|-------------|
 | `Dockerfile` | Node.js 20 Alpine image with native build deps and workspace build steps for pi coding-agent |
-| `run.sh` / `run.ps1` | Interactive management menu |
-| `build.sh` / `build.ps1` | Builds the Docker image and starts the container |
-| `launch.sh` / `launch.ps1` | Launches or resumes the pi container |
-| `localprovider.sh` / `localprovider.ps1` | Configures local LLM providers |
-| `backup.sh` / `backup.ps1` | Creates timestamped backups |
-| `restore.sh` / `restore.ps1` | Restores from backup |
+| `setup.sh` / `setup.ps1` | Step-by-step setup wizard: create profiles, configure Docker settings, build images |
+| `run.sh` / `run.ps1` | Interactive management menu (launch pi, extensions, backups, etc.) |
+| `scripts/build.sh` / `scripts/build.ps1` | Builds the Docker image and starts the container |
+| `scripts/launch.sh` / `scripts/launch.ps1` | Launches or resumes the pi container |
+| `scripts/localprovider.sh` / `scripts/localprovider.ps1` | Configures local LLM providers |
+| `scripts/backup.sh` / `scripts/backup.ps1` | Creates timestamped backups |
+| `scripts/restore.sh` / `scripts/restore.ps1` | Restores from backup |
+| `scripts/_config.sh` / `scripts/_config.ps1` | Shared config loader (reads active profile) |
 
 > **Note:** The container runs as root with full system access—install packages, modify files, and run arbitrary commands freely.
 

@@ -3,7 +3,11 @@
 
 $ErrorActionPreference = 'Stop'
 $scriptDir    = Split-Path -Parent $MyInvocation.MyCommand.Path
-$CONTAINER    = 'pi-agent'
+
+# Load active configuration
+. "$scriptDir\scripts\_config.ps1"
+
+$CONTAINER    = $ContainerName
 $EXT_EXAMPLES = '/usr/local/lib/node_modules/@mariozechner/pi-coding-agent/examples/extensions'
 $EXT_USER     = '/root/.pi/extensions'
 
@@ -14,15 +18,16 @@ function Show-Menu {
     Write-Host ''
     Write-Host '  pi-agent  --  management menu' -ForegroundColor Cyan
     Write-Host '  ================================' -ForegroundColor DarkCyan
+    Write-Host "  profile: $ActiveProfile ($ContainerName)" -ForegroundColor DarkGray
     Write-Host ''
-    Write-Host '  [1] Launch pi                (launch.ps1)' -ForegroundColor Green
-    Write-Host '  [2] Launch pi with extensions'             -ForegroundColor Green
-    Write-Host '  [3] Open container shell'                  -ForegroundColor Green
-    Write-Host '  [4] Build image              (build.ps1)'  -ForegroundColor Yellow
-    Write-Host '  [5] Provider configuration   (localprovider.ps1)' -ForegroundColor Cyan
-    Write-Host '  [6] Backup management'                     -ForegroundColor Magenta
-    Write-Host '  [7] Container management'                  -ForegroundColor DarkYellow
-    Write-Host '  [Q] Quit'                                  -ForegroundColor DarkGray
+    Write-Host '  [1] Launch pi'                                     -ForegroundColor Green
+    Write-Host '  [2] Launch pi with extensions'                     -ForegroundColor Green
+    Write-Host '  [3] Open container shell'                          -ForegroundColor Green
+    Write-Host '  [4] Provider configuration'                        -ForegroundColor Cyan
+    Write-Host '  [5] Backup management'                             -ForegroundColor Magenta
+    Write-Host '  [6] Container management'                          -ForegroundColor DarkYellow
+    Write-Host '  [7] Setup / switch profile'                        -ForegroundColor Cyan
+    Write-Host '  [Q] Quit'                                          -ForegroundColor DarkGray
     Write-Host ''
 }
 
@@ -103,12 +108,12 @@ function Invoke-RestoreBackup {
     if ($sel -match '^\d+$') {
         $idx = [int]$sel - 1
         if ($idx -ge 0 -and $idx -lt $files.Count) {
-            Invoke-Script 'restore.ps1' @($files[$idx].FullName)
+            Invoke-Script 'scripts\restore.ps1' @($files[$idx].FullName)
         } else {
             Write-Host '  Invalid selection.' -ForegroundColor Red
         }
     } else {
-        Invoke-Script 'restore.ps1' @($sel)
+        Invoke-Script 'scripts\restore.ps1' @($sel)
     }
 }
 
@@ -155,9 +160,9 @@ function Show-BackupMenu {
     Write-Host '  Backup Management' -ForegroundColor Cyan
     Write-Host '  =================' -ForegroundColor DarkCyan
     Write-Host ''
-    Write-Host '  [1] Create backup  (backup.ps1)'
+    Write-Host '  [1] Create backup'
     Write-Host '  [2] List backups'
-    Write-Host '  [3] Restore backup (restore.ps1)'
+    Write-Host '  [3] Restore backup'
     Write-Host '  [4] Delete backup'
     Write-Host ''
     Write-Host '  Press Enter to go back.' -ForegroundColor DarkGray
@@ -171,7 +176,7 @@ function Invoke-BackupMenu {
         if ($choice -eq '') { return }
         Write-Host ''
         switch ($choice) {
-            '1' { Invoke-Script 'backup.ps1' }
+            '1' { Invoke-Script 'scripts\backup.ps1' }
             '2' { Show-BackupList -Files (Get-BackupFiles) }
             '3' { Invoke-RestoreBackup }
             '4' { Invoke-DeleteBackup }
@@ -217,7 +222,7 @@ function Invoke-ContainerMenu {
                 docker ps -a --filter "name=$CONTAINER"
                 Write-Host ''
                 Write-Host '--- docker volume ---' -ForegroundColor DarkCyan
-                docker volume ls --filter 'name=pi-agent-data'
+                docker volume ls --filter "name=$VolumeName"
             }
             default { Write-Host '  Unknown option.' -ForegroundColor Red }
         }
@@ -322,20 +327,20 @@ while ($true) {
     Write-Host ''
 
     switch ($choice) {
-        '1' { Invoke-Script 'launch.ps1'; break }
+        '1' { Invoke-Script 'scripts\launch.ps1'; break }
         '2' { Invoke-LaunchWithExtensions; break }
         '3' { Invoke-OpenContainerShell; break }
-        '4' { Invoke-Script 'build.ps1';  break }
-        '5' { Invoke-Script 'localprovider.ps1'; break }
-        '6' { Invoke-BackupMenu; break }
-        '7' { Invoke-ContainerMenu; break }
+        '4' { Invoke-Script 'scripts\localprovider.ps1'; break }
+        '5' { Invoke-BackupMenu; break }
+        '6' { Invoke-ContainerMenu; break }
+        '7' { Invoke-Script 'setup.ps1'; break }
         'Q' { Write-Host '  Bye.'; exit 0 }
         default { Write-Host '  Unknown option.' -ForegroundColor Red; break }
     }
 
     # Pause after output-producing actions so results aren't erased by Clear-Host.
-    # Submenus (6, 7) handle their own flow — no extra pause needed.
-    if ($choice -notin '6','7','Q') {
+    # Submenus (5, 6) handle their own flow — no extra pause needed.
+    if ($choice -notin '5','6','7','Q') {
         Write-Host ''
         Read-Host '  Press Enter to return to menu'
     }

@@ -3,7 +3,11 @@
 
 $ErrorActionPreference = 'Stop'
 $scriptDir     = Split-Path -Parent $MyInvocation.MyCommand.Path
-$CONTAINER     = 'pi-agent'
+
+# Load active configuration
+. "$scriptDir\_config.ps1"
+
+$CONTAINER     = $ContainerName
 $PI_MODELS_PATH = '/root/.pi/agent/models.json'
 
 # ── helpers ────────────────────────────────────────────────────────────────────

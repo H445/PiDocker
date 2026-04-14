@@ -4,7 +4,9 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONTAINER="pi-agent"
+source "$SCRIPT_DIR/scripts/_config.sh"
+
+CONTAINER="$CONTAINER_NAME"
 EXT_EXAMPLES="/usr/local/lib/node_modules/@mariozechner/pi-coding-agent/examples/extensions"
 EXT_USER="/root/.pi/extensions"
 SELECTED_EXTENSIONS=()
@@ -16,14 +18,15 @@ show_menu() {
     echo
     echo "  pi-agent  --  management menu"
     echo "  ================================"
+    echo "  profile: $ACTIVE_PROFILE ($CONTAINER_NAME)"
     echo
-    echo "  [1] Launch pi                (launch.sh)"
+    echo "  [1] Launch pi"
     echo "  [2] Launch pi with extensions"
     echo "  [3] Open container shell"
-    echo "  [4] Build image              (build.sh)"
-    echo "  [5] Provider configuration   (localprovider.sh)"
-    echo "  [6] Backup management"
-    echo "  [7] Container management"
+    echo "  [4] Provider configuration"
+    echo "  [5] Backup management"
+    echo "  [6] Container management"
+    echo "  [7] Setup / switch profile"
     echo "  [Q] Quit"
     echo
 }
@@ -95,12 +98,12 @@ restore_backup_menu() {
     if [[ "$sel" =~ ^[0-9]+$ ]]; then
         local idx=$((sel - 1))
         if (( idx >= 0 && idx < ${#files[@]} )); then
-            invoke_script "restore.sh" "${files[$idx]}"
+            invoke_script "scripts/restore.sh" "${files[$idx]}"
         else
             echo "  Invalid selection."
         fi
     else
-        invoke_script "restore.sh" "$sel"
+        invoke_script "scripts/restore.sh" "$sel"
     fi
 }
 
@@ -147,9 +150,9 @@ show_backup_menu() {
     echo "  Backup Management"
     echo "  ================="
     echo
-    echo "  [1] Create backup  (backup.sh)"
+    echo "  [1] Create backup"
     echo "  [2] List backups"
-    echo "  [3] Restore backup (restore.sh)"
+    echo "  [3] Restore backup"
     echo "  [4] Delete backup"
     echo
     echo "  Press Enter to go back."
@@ -165,7 +168,7 @@ backup_management_menu() {
         echo
 
         case "$choice" in
-            1) invoke_script "backup.sh" ;;
+            1) invoke_script "scripts/backup.sh" ;;
             2) show_backup_list ;;
             3) restore_backup_menu ;;
             4) delete_backup_menu ;;
@@ -214,7 +217,7 @@ container_management_menu() {
                 docker ps -a --filter "name=$CONTAINER"
                 echo
                 echo "--- docker volume ---"
-                docker volume ls --filter "name=pi-agent-data"
+                docker volume ls --filter "name=$VOLUME_NAME"
                 ;;
             *) echo "  Unknown option." ;;
         esac
@@ -347,21 +350,21 @@ while true; do
     echo
 
     case "$choice" in
-        1) invoke_script "launch.sh" ;;
+        1) invoke_script "scripts/launch.sh" ;;
         2) launch_with_extensions ;;
         3) open_container_shell ;;
-        4) invoke_script "build.sh" ;;
-        5) invoke_script "localprovider.sh" ;;
-        6) backup_management_menu ;;
-        7) container_management_menu ;;
+        4) invoke_script "scripts/localprovider.sh" ;;
+        5) backup_management_menu ;;
+        6) container_management_menu ;;
+        7) invoke_script "setup.sh" ;;
         Q) echo "  Bye."; exit 0 ;;
         *) echo "  Unknown option." ;;
     esac
 
     # Pause after output-producing actions so results aren't erased by clear.
-    # Submenus (6, 7) handle their own flow — no extra pause needed.
+    # Submenus (5, 6) handle their own flow — no extra pause needed.
     case "$choice" in
-        6|7|Q) ;;
+        5|6|7|Q) ;;
         *) echo; read -r -p "  Press Enter to return to menu" ;;
     esac
 done

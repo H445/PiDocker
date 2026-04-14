@@ -4,7 +4,9 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONTAINER="pi-agent"
+source "$SCRIPT_DIR/_config.sh"
+
+CONTAINER="$CONTAINER_NAME"
 PI_MODELS_PATH="/root/.pi/agent/models.json"
 
 # ── helpers ────────────────────────────────────────────────────────────────────
