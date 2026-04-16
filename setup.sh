@@ -93,6 +93,72 @@ show_profile_list() {
     echo
 }
 
+# ── volume mounts sub-menu ─────────────────────────────────────────────────────
+
+# edit_volume_mounts <nameref-array>
+# Caller passes the name of an array variable to use as input/output.
+# Usage:  mounts=("a:b" "c:d"); edit_volume_mounts mounts
+edit_volume_mounts() {
+    local -n _mounts_ref=$1   # bash nameref (requires bash 4.3+)
+
+    while true; do
+        echo
+        echo "  Volume Mounts"
+        echo "  -------------"
+        echo "  Map host folders into the container (host_path:container_path)."
+        echo
+
+        if (( ${#_mounts_ref[@]} == 0 )); then
+            echo "  (none)"
+        else
+            local i=1
+            for m in "${_mounts_ref[@]}"; do
+                echo "  $i. $m"
+                ((i++))
+            done
+        fi
+
+        echo
+        echo "  [A] Add mount   [R] Remove mount   [C] Clear all   [K] Keep / done"
+        echo
+        read -r -p "  Select: " action
+        action="${action^^}"
+
+        case "$action" in
+            A)
+                read -r -p "  Host path (e.g. /home/user/projects): " host_path
+                host_path="$(echo "$host_path" | xargs)"
+                [[ -z "$host_path" ]] && echo "  Canceled." && continue
+                read -r -p "  Container path (e.g. /workspace): "   ctn_path
+                ctn_path="$(echo "$ctn_path" | xargs)"
+                [[ -z "$ctn_path" ]] && echo "  Canceled." && continue
+                _mounts_ref+=("${host_path}:${ctn_path}")
+                echo "  ✓ Added: ${host_path}:${ctn_path}"
+                ;;
+            R)
+                if (( ${#_mounts_ref[@]} == 0 )); then echo "  Nothing to remove."; continue; fi
+                read -r -p "  Enter mount number to remove: " num
+                if [[ "$num" =~ ^[0-9]+$ ]]; then
+                    local ridx=$((num - 1))
+                    if (( ridx >= 0 && ridx < ${#_mounts_ref[@]} )); then
+                        local removed="${_mounts_ref[$ridx]}"
+                        _mounts_ref=("${_mounts_ref[@]:0:$ridx}" "${_mounts_ref[@]:$((ridx+1))}")
+                        echo "  ✓ Removed: $removed"
+                    else
+                        echo "  Invalid number."
+                    fi
+                fi
+                ;;
+            C)
+                _mounts_ref=()
+                echo "  ✓ All mounts cleared."
+                ;;
+            K) return ;;
+            *) echo "  Unknown option." ;;
+        esac
+    done
+}
+
 # ── wizard: create & build ─────────────────────────────────────────────────────
 
 setup_wizard() {
@@ -138,15 +204,29 @@ setup_wizard() {
     read -r -p "  Volume name    [${img}-data]: " vol
     [[ -z "$vol" ]] && vol="${img}-data"
 
-    # ── Step 3: Review ──
+    # ── Step 3: Volume mounts ──
     echo
-    echo "  Step 3 — Review"
+    echo "  Step 3 — Volume Mounts"
+    echo "  ----------------------"
+    echo "  Optionally map host folders into the container."
+    local -a mounts=()
+    edit_volume_mounts mounts
+
+    # ── Step 4: Review ──
+    echo
+    echo "  Step 4 — Review"
     echo "  ---------------"
     echo
     echo "  Profile:   $name"
     echo "  Image:     ${img}:${tag}"
     echo "  Container: $ctn"
     echo "  Volume:    $vol"
+    if (( ${#mounts[@]} > 0 )); then
+        echo "  Mounts:"
+        for m in "${mounts[@]}"; do echo "    - $m"; done
+    else
+        echo "  Mounts:    (none)"
+    fi
     echo
 
     read -r -p "  Look good? (Y/n): " confirm
@@ -156,15 +236,21 @@ setup_wizard() {
     fi
 
     # Save config
-    printf "IMAGE_NAME=%s\nIMAGE_TAG=%s\nCONTAINER_NAME=%s\nVOLUME_NAME=%s\n" \
-        "$img" "$tag" "$ctn" "$vol" > "$conf_file"
+    {
+        printf "IMAGE_NAME=%s\nIMAGE_TAG=%s\nCONTAINER_NAME=%s\nVOLUME_NAME=%s\n" \
+            "$img" "$tag" "$ctn" "$vol"
+        if (( ${#mounts[@]} > 0 )); then
+            local IFS=';'
+            printf "VOLUME_MOUNTS=%s\n" "${mounts[*]}"
+        fi
+    } > "$conf_file"
     echo "$name" > "$ACTIVE_FILE"
     echo
     echo "  ✓ Profile '$name' saved and set as active."
 
-    # ── Step 4: Build ──
+    # ── Step 5: Build ──
     echo
-    echo "  Step 4 — Build"
+    echo "  Step 5 — Build"
     echo "  --------------"
     echo
 
@@ -227,11 +313,18 @@ edit_profile() {
     local name="${profiles[$idx]}"
     local file="$CONFIG_DIR/${name}.conf"
 
-    local old_img old_tag old_ctn old_vol
+    local old_img old_tag old_ctn old_vol old_mounts_str
     old_img=$(read_profile_value "$file" "IMAGE_NAME")
     old_tag=$(read_profile_value "$file" "IMAGE_TAG")
     old_ctn=$(read_profile_value "$file" "CONTAINER_NAME")
     old_vol=$(read_profile_value "$file" "VOLUME_NAME")
+    old_mounts_str=$(read_profile_value "$file" "VOLUME_MOUNTS")
+
+    # Split existing mounts on semicolons
+    local -a old_mounts=()
+    if [[ -n "$old_mounts_str" ]]; then
+        IFS=';' read -ra old_mounts <<< "$old_mounts_str"
+    fi
 
     echo
     echo "  Editing: $name"
@@ -250,8 +343,25 @@ edit_profile() {
     read -r -p "  Volume name    [$old_vol]: " vol
     [[ -z "$vol" ]] && vol="$old_vol"
 
-    printf "IMAGE_NAME=%s\nIMAGE_TAG=%s\nCONTAINER_NAME=%s\nVOLUME_NAME=%s\n" \
-        "$img" "$tag" "$ctn" "$vol" > "$file"
+    echo
+    echo "  Volume Mounts"
+    echo "  Current:"
+    if (( ${#old_mounts[@]} > 0 )); then
+        for m in "${old_mounts[@]}"; do echo "    - $m"; done
+    else
+        echo "    (none)"
+    fi
+    local -a mounts=("${old_mounts[@]}")
+    edit_volume_mounts mounts
+
+    {
+        printf "IMAGE_NAME=%s\nIMAGE_TAG=%s\nCONTAINER_NAME=%s\nVOLUME_NAME=%s\n" \
+            "$img" "$tag" "$ctn" "$vol"
+        if (( ${#mounts[@]} > 0 )); then
+            local IFS=';'
+            printf "VOLUME_MOUNTS=%s\n" "${mounts[*]}"
+        fi
+    } > "$file"
 
     echo
     echo "  ✓ Profile '$name' updated."

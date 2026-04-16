@@ -21,10 +21,25 @@ if [[ ! -f "$_CONF_FILE" ]]; then
 fi
 
 # Source the key=value file directly
-while IFS='=' read -r key value; do
-    key="$(echo "$key" | xargs)"
-    value="$(echo "$value" | xargs)"
-    [[ -z "$key" || "$key" == \#* ]] && continue
-    export "$key=$value"
+# Use read with IFS='' to get the raw line, then split on first '=' only
+while IFS= read -r _line || [[ -n "$_line" ]]; do
+    _line="${_line#"${_line%%[![:space:]]*}"}"   # ltrim
+    _line="${_line%"${_line##*[![:space:]]}"}"   # rtrim
+    [[ -z "$_line" || "$_line" == \#* ]] && continue
+    _key="${_line%%=*}"
+    _val="${_line#*=}"
+    export "${_key}=${_val}"
 done < "$_CONF_FILE"
+
+# Parse VOLUME_MOUNTS into an array (semicolon-separated host_path:container_path)
+# Example in .conf:  VOLUME_MOUNTS=/host/data:/data;/host/projects:/workspace
+VOLUME_MOUNT_ARGS=()
+if [[ -n "$VOLUME_MOUNTS" ]]; then
+    IFS=';' read -ra _mounts <<< "$VOLUME_MOUNTS"
+    for _mount in "${_mounts[@]}"; do
+        _mount="$(echo "$_mount" | xargs)"
+        [[ -z "$_mount" ]] && continue
+        VOLUME_MOUNT_ARGS+=(-v "$_mount")
+    done
+fi
 

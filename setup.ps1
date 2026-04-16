@@ -35,12 +35,20 @@ function Get-AllProfiles {
                 if ($parts.Count -eq 2) { $cfg[$parts[0].Trim()] = $parts[1].Trim() }
             }
         }
+        # Parse VOLUME_MOUNTS into an array
+        $mountList = @()
+        if ($cfg['VOLUME_MOUNTS']) {
+            $mountList = $cfg['VOLUME_MOUNTS'] -split ';' |
+                         Where-Object { $_.Trim() -ne '' } |
+                         ForEach-Object { $_.Trim() }
+        }
         $profiles += [PSCustomObject]@{
             Name          = $name
             ImageName     = $cfg['IMAGE_NAME']
             ImageTag      = $cfg['IMAGE_TAG']
             ContainerName = $cfg['CONTAINER_NAME']
             VolumeName    = $cfg['VOLUME_NAME']
+            VolumeMounts  = $mountList
             FilePath      = $f.FullName
         }
     }
@@ -103,6 +111,69 @@ function Show-ProfileList {
     Write-Host ''
 }
 
+# ── volume mounts sub-menu ─────────────────────────────────────────────────────
+
+function Invoke-EditVolumeMounts {
+    param([string[]]$Current = @())
+
+    $mounts = [System.Collections.Generic.List[string]]($Current)
+
+    while ($true) {
+        Write-Host ''
+        Write-Host '  Volume Mounts' -ForegroundColor Yellow
+        Write-Host '  -------------' -ForegroundColor DarkGray
+        Write-Host '  Map host folders into the container (host_path:container_path).' -ForegroundColor DarkGray
+        Write-Host ''
+
+        if ($mounts.Count -eq 0) {
+            Write-Host '  (none)' -ForegroundColor DarkGray
+        } else {
+            $i = 1
+            foreach ($m in $mounts) {
+                Write-Host "  $i. $m"
+                $i++
+            }
+        }
+
+        Write-Host ''
+        Write-Host '  [A] Add mount   [R] Remove mount   [C] Clear all   [K] Keep / done' -ForegroundColor DarkGray
+        Write-Host ''
+
+        $action = (Read-Host '  Select').Trim().ToUpper()
+
+        switch ($action) {
+            'A' {
+                $hostPath = (Read-Host '  Host path (e.g. C:\Projects\myapp)').Trim()
+                if (-not $hostPath) { Write-Host '  Canceled.' -ForegroundColor DarkYellow; break }
+                $ctnPath  = (Read-Host '  Container path (e.g. /workspace)').Trim()
+                if (-not $ctnPath) { Write-Host '  Canceled.' -ForegroundColor DarkYellow; break }
+                $mounts.Add("${hostPath}:${ctnPath}")
+                Write-Host "  ✓ Added: ${hostPath}:${ctnPath}" -ForegroundColor Green
+            }
+            'R' {
+                if ($mounts.Count -eq 0) { Write-Host '  Nothing to remove.' -ForegroundColor DarkYellow; break }
+                $num = (Read-Host '  Enter mount number to remove').Trim()
+                if ($num -match '^\d+$') {
+                    $ridx = [int]$num - 1
+                    if ($ridx -ge 0 -and $ridx -lt $mounts.Count) {
+                        $removed = $mounts[$ridx]
+                        $mounts.RemoveAt($ridx)
+                        Write-Host "  ✓ Removed: $removed" -ForegroundColor Green
+                    } else {
+                        Write-Host '  Invalid number.' -ForegroundColor Red
+                    }
+                }
+            }
+            'C' {
+                $mounts.Clear()
+                Write-Host '  ✓ All mounts cleared.' -ForegroundColor Green
+            }
+            'K' { return ,$mounts.ToArray() }
+            default { Write-Host '  Unknown option.' -ForegroundColor Red }
+        }
+    }
+}
+
 # ── wizard: create & build ─────────────────────────────────────────────────────
 
 function Invoke-SetupWizard {
@@ -147,15 +218,28 @@ function Invoke-SetupWizard {
     $vol = (Read-Host "  Volume name    [$img-data]").Trim()
     if (-not $vol) { $vol = "$img-data" }
 
-    # ── Step 3: Review ──
+    # ── Step 3: Volume mounts ──
     Write-Host ''
-    Write-Host '  Step 3 — Review' -ForegroundColor Yellow
+    Write-Host '  Step 3 — Volume Mounts' -ForegroundColor Yellow
+    Write-Host '  ----------------------' -ForegroundColor DarkGray
+    Write-Host '  Optionally map host folders into the container.' -ForegroundColor DarkGray
+    $mounts = Invoke-EditVolumeMounts -Current @()
+
+    # ── Step 4: Review ──
+    Write-Host ''
+    Write-Host '  Step 4 — Review' -ForegroundColor Yellow
     Write-Host '  ---------------' -ForegroundColor DarkGray
     Write-Host ''
     Write-Host "  Profile:   $name"
     Write-Host "  Image:     ${img}:${tag}"
     Write-Host "  Container: $ctn"
     Write-Host "  Volume:    $vol"
+    if ($mounts.Count -gt 0) {
+        Write-Host "  Mounts:"
+        foreach ($m in $mounts) { Write-Host "    - $m" }
+    } else {
+        Write-Host "  Mounts:    (none)"
+    }
     Write-Host ''
 
     $confirm = (Read-Host '  Look good? (Y/n)').Trim().ToUpper()
@@ -165,20 +249,21 @@ function Invoke-SetupWizard {
     }
 
     # Save config
+    $mountsLine = if ($mounts.Count -gt 0) { "`nVOLUME_MOUNTS=$($mounts -join ';')" } else { '' }
     $content = @"
 IMAGE_NAME=$img
 IMAGE_TAG=$tag
 CONTAINER_NAME=$ctn
-VOLUME_NAME=$vol
+VOLUME_NAME=$vol$mountsLine
 "@
     Set-Content -Path $confPath -Value $content -NoNewline
     Set-Content -Path $activeFile -Value $name -NoNewline
     Write-Host ''
     Write-Host "  ✓ Profile '$name' saved and set as active." -ForegroundColor Green
 
-    # ── Step 4: Build ──
+    # ── Step 5: Build ──
     Write-Host ''
-    Write-Host '  Step 4 — Build' -ForegroundColor Yellow
+    Write-Host '  Step 5 — Build' -ForegroundColor Yellow
     Write-Host '  --------------' -ForegroundColor DarkGray
     Write-Host ''
 
@@ -197,6 +282,7 @@ VOLUME_NAME=$vol
 }
 
 # ── build ──────────────────────────────────────────────────────────────────────
+
 
 function Invoke-BuildImage {
     $active = Get-ActiveProfileName
@@ -260,11 +346,22 @@ function Invoke-EditProfile {
     $vol = (Read-Host "  Volume name    [$($p.VolumeName)]").Trim()
     if (-not $vol) { $vol = $p.VolumeName }
 
+    Write-Host ''
+    Write-Host '  Volume Mounts' -ForegroundColor Yellow
+    Write-Host '  Current:' -ForegroundColor DarkGray
+    if ($p.VolumeMounts.Count -gt 0) {
+        $p.VolumeMounts | ForEach-Object { Write-Host "    - $_" -ForegroundColor DarkGray }
+    } else {
+        Write-Host '    (none)' -ForegroundColor DarkGray
+    }
+    $mounts = Invoke-EditVolumeMounts -Current $p.VolumeMounts
+
+    $mountsLine = if ($mounts.Count -gt 0) { "`nVOLUME_MOUNTS=$($mounts -join ';')" } else { '' }
     $content = @"
 IMAGE_NAME=$img
 IMAGE_TAG=$tag
 CONTAINER_NAME=$ctn
-VOLUME_NAME=$vol
+VOLUME_NAME=$vol$mountsLine
 "@
     Set-Content -Path $p.FilePath -Value $content -NoNewline
     Write-Host ''

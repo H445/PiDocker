@@ -47,3 +47,10 @@ $ImageTag      = $IMAGE_TAG
 $ContainerName = $CONTAINER_NAME
 $VolumeName    = $VOLUME_NAME
 
+# Parse VOLUME_MOUNTS (semicolon-separated list of host_path:container_path)
+# Example in .conf:  VOLUME_MOUNTS=C:\Projects\app:/workspace;C:\data:/data
+$VolumeMounts = @()
+if ($VOLUME_MOUNTS) {
+    $VolumeMounts = $VOLUME_MOUNTS -split ';' | Where-Object { $_.Trim() -ne '' } | ForEach-Object { $_.Trim() }
+}
+
