@@ -6,42 +6,37 @@ source "$SCRIPT_DIR/_config.sh"
 
 IMAGE_FULL="${IMAGE_NAME}:${IMAGE_TAG}"
 
-# ── helper: check if container's mounts match what the profile requires ────────
-container_mounts_match() {
-    local container="$1"
-    # Docker Desktop rewrites host paths to internal Linux-style paths
-    # (e.g. /run/desktop/mnt/host/d/...), so comparing source paths is
-    # unreliable.  Compare only destination paths + named-volume name.
-    local mount_info
-    mount_info="$(docker inspect --format \
-        '{{range .Mounts}}{{.Name}}|{{.Destination}} {{end}}' \
-        "$container" 2>/dev/null)"
+# ── Mount-config fingerprint ──────────────────────────────────────────────────
+# Instead of inspecting Docker (which rewrites paths on Docker Desktop),
+# save a fingerprint file when creating/recreating the container and compare
+# it on the next launch.
+if [[ -d "$SCRIPT_DIR/configs" ]]; then
+    _CONFIG_DIR="$SCRIPT_DIR/configs"
+else
+    _CONFIG_DIR="$(dirname "$SCRIPT_DIR")/configs"
+fi
+_MOUNT_FINGERPRINT_FILE="${_CONFIG_DIR}/.mounts_${CONTAINER_NAME}"
 
-    # Named volume check
-    if [[ "$mount_info" != *"${VOLUME_NAME}|/root"* ]]; then
-        return 1
-    fi
-
-    # Extra bind mounts: check container-side destination paths
+get_mount_fingerprint() {
+    echo "volume=${VOLUME_NAME}:/root"
+    # Sort the extra mount specs for deterministic comparison
     for mount_spec in "${VOLUME_MOUNT_ARGS[@]}"; do
         [[ "$mount_spec" == "-v" ]] && continue
-        # mount_spec is "host_path:container_path" — grab container path
-        local ctn_path="${mount_spec#*:}"
-        if [[ "$mount_info" != *"|${ctn_path} "* ]]; then
-            return 1
-        fi
-    done
+        echo "bind=$mount_spec"
+    done | sort
+}
 
-    # Verify total mount count to detect stale extra mounts
-    # Expected: root volume + docker.sock + each extra mount
-    local expected_count=$(( 2 + ${#VOLUME_MOUNT_ARGS[@]} / 2 ))
-    local actual_count
-    actual_count="$(echo "$mount_info" | grep -o '|' | wc -l)"
-    if [[ "$actual_count" -ne "$expected_count" ]]; then
-        return 1
-    fi
+CURRENT_FINGERPRINT="$(get_mount_fingerprint)"
 
-    return 0
+save_mount_fingerprint() {
+    printf '%s' "$CURRENT_FINGERPRINT" > "$_MOUNT_FINGERPRINT_FILE"
+}
+
+mount_fingerprint_matches() {
+    [[ -f "$_MOUNT_FINGERPRINT_FILE" ]] || return 1
+    local saved
+    saved="$(cat "$_MOUNT_FINGERPRINT_FILE")"
+    [[ "$saved" == "$CURRENT_FINGERPRINT" ]]
 }
 
 # ── helper: create the container with all configured mounts ───────────────────
@@ -53,12 +48,14 @@ docker_run() {
         "${VOLUME_MOUNT_ARGS[@]}" \
         "${IMAGE_FULL}" \
         tail -f /dev/null
+    # Save fingerprint so next launch knows the config hasn't changed
+    save_mount_fingerprint
 }
 
 # ── main ──────────────────────────────────────────────────────────────────────
 if docker ps -a --filter "name=^${CONTAINER_NAME}$" --format '{{.Names}}' | grep -q "${CONTAINER_NAME}"; then
-    # Container exists — check if mounts match before deciding to reuse it
-    if ! container_mounts_match "${CONTAINER_NAME}"; then
+    # Container exists — compare saved mount fingerprint to current config
+    if ! mount_fingerprint_matches; then
         echo "Container '${CONTAINER_NAME}' mount config has changed. Recreating..."
         docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1
         docker_run

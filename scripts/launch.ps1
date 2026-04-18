@@ -14,6 +14,41 @@ if (-not $dockerCmd) {
     Write-Error "Docker was not found in PATH. Install Docker Desktop and ensure 'docker' is available."
 }
 
+# ── Mount-config fingerprint ──────────────────────────────────────────────────
+# Build a canonical string that represents the current mount configuration.
+# We save this to a file when creating/recreating the container and compare it
+# on the next launch.  This avoids all the issues with docker inspect returning
+# rewritten paths on Docker Desktop (Windows/Mac).
+$_configDir = if (Test-Path (Join-Path $PSScriptRoot 'configs')) {
+    Join-Path $PSScriptRoot 'configs'
+} else {
+    Join-Path (Split-Path $PSScriptRoot -Parent) 'configs'
+}
+$_mountFingerprintFile = Join-Path $_configDir ".mounts_${ContainerName}"
+
+function Get-MountFingerprint {
+    # Deterministic string: volume name + sorted extra mounts
+    $parts = @("volume=${VolumeName}:/root")
+    foreach ($m in ($VolumeMounts | Sort-Object)) {
+        $parts += "bind=$m"
+    }
+    return ($parts -join "`n")
+}
+
+$currentFingerprint = Get-MountFingerprint
+
+function Save-MountFingerprint {
+    $currentFingerprint | Set-Content -Path $_mountFingerprintFile -NoNewline -Encoding UTF8
+}
+
+function Test-MountFingerprintMatch {
+    if (-not (Test-Path $_mountFingerprintFile)) { return $false }
+    $saved = Get-Content $_mountFingerprintFile -Raw -Encoding UTF8
+    return ($saved -eq $currentFingerprint)
+}
+
+# ── Docker helpers ────────────────────────────────────────────────────────────
+
 # Check if container already exists
 $existing = & $dockerCmd.Source ps -a --filter "name=^${ContainerName}$" --format '{{.Names}}'
 if ($LASTEXITCODE -ne 0) {
@@ -34,41 +69,14 @@ function Invoke-DockerRun {
         -v '/var/run/docker.sock:/var/run/docker.sock' `
         @extraVolArgs `
         "${ImageName}:${ImageTag}" 'tail' '-f' '/dev/null' | Out-Null
-}
-
-# Helper: check if the running container's mounts match the profile config
-function Test-ContainerMountsMatch {
-    # Docker Desktop (Windows/Mac) rewrites host paths to internal Linux-style
-    # paths (e.g. /run/desktop/mnt/host/d/...), so comparing source paths is
-    # unreliable.  Instead we compare only destination (container-side) paths,
-    # plus the named-volume name for the root volume.
-
-    $mountJson = & $dockerCmd.Source inspect --format '{{range .Mounts}}{{.Name}}|{{.Destination}} {{end}}' $ContainerName 2>$null
-
-    # Named volume: verify the root volume name is correct
-    if ($mountJson -notlike "*${VolumeName}|/root*") { return $false }
-
-    # Extra bind mounts: check that each expected container-side path is present
-    foreach ($mount in $VolumeMounts) {
-        # $mount is "host_path:container_path" — grab the container path
-        $containerPath = ($mount -split ':', 2)[1]
-        if (-not $containerPath) { continue }
-        if ($mountJson -notlike "*|${containerPath} *") { return $false }
-    }
-
-    # Also verify total mount count matches to detect stale extra mounts.
-    # Expected: root volume + docker.sock + each extra mount
-    $expectedCount = 2 + $VolumeMounts.Count
-    $actualCount   = ([regex]::Matches($mountJson, '\|')).Count
-    if ($actualCount -ne $expectedCount) { return $false }
-
-    return $true
+    # Save fingerprint so next launch knows the config hasn't changed
+    Save-MountFingerprint
 }
 
 # ── main ──────────────────────────────────────────────────────────────────────
 if ($existing -contains $ContainerName) {
-    # Container exists — verify mounts match before reusing it
-    if (-not (Test-ContainerMountsMatch)) {
+    # Container exists — compare saved mount fingerprint to current config
+    if (-not (Test-MountFingerprintMatch)) {
         Write-Host "Container '$ContainerName' mount config has changed. Recreating..." -ForegroundColor Yellow
         & $dockerCmd.Source rm -f $ContainerName | Out-Null
         Invoke-DockerRun
