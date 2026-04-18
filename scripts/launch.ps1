@@ -38,18 +38,22 @@ function Invoke-DockerRun {
 
 # Helper: check if the running container's mounts match the profile config
 function Test-ContainerMountsMatch {
-    # Use .Name for named volumes, .Source for bind mounts — avoids comparing
-    # raw host paths like /var/lib/docker/volumes/... against the volume name
-    $actualMounts = & $dockerCmd.Source inspect `
-        --format '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}}{{else}}{{.Source}}{{end}}:{{.Destination}} {{end}}' `
+    # Named volumes: .Name is set; bind mounts: .Name is empty, .Source is the host path.
+    # Use two separate format strings (no inner double-quotes) to avoid PowerShell
+    # stripping quotes when passing to native commands.
+    $namedMounts = & $dockerCmd.Source inspect `
+        --format '{{range .Mounts}}{{.Name}}:{{.Destination}} {{end}}' `
+        $ContainerName 2>$null
+    $bindMounts  = & $dockerCmd.Source inspect `
+        --format '{{range .Mounts}}{{.Source}}:{{.Destination}} {{end}}' `
         $ContainerName 2>$null
 
-    # Named volume
-    if ($actualMounts -notlike "*${VolumeName}:/root*") { return $false }
+    # Named volume check
+    if ($namedMounts -notlike "*${VolumeName}:/root*") { return $false }
 
-    # Extra mounts from profile
+    # Bind-mount checks for any extra mounts in the profile
     foreach ($mount in $VolumeMounts) {
-        if ($actualMounts -notlike "*${mount}*") { return $false }
+        if ($bindMounts -notlike "*${mount}*") { return $false }
     }
     return $true
 }
