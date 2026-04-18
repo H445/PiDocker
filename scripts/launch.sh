@@ -9,10 +9,11 @@ IMAGE_FULL="${IMAGE_NAME}:${IMAGE_TAG}"
 # ── helper: check if container's mounts match what the profile requires ────────
 container_mounts_match() {
     local container="$1"
-    # Collect all source:destination pairs Docker knows about for this container
+    # Use .Name for named volumes, .Source for bind mounts — avoids comparing
+    # raw host paths like /var/lib/docker/volumes/... against the volume name
     local actual_mounts
     actual_mounts="$(docker inspect --format \
-        '{{range .Mounts}}{{.Source}}:{{.Destination}} {{end}}' \
+        '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}}{{else}}{{.Source}}{{end}}:{{.Destination}} {{end}}' \
         "$container" 2>/dev/null)"
 
     # Named volume
