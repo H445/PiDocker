@@ -38,23 +38,30 @@ function Invoke-DockerRun {
 
 # Helper: check if the running container's mounts match the profile config
 function Test-ContainerMountsMatch {
-    # Named volumes: .Name is set; bind mounts: .Name is empty, .Source is the host path.
-    # Use two separate format strings (no inner double-quotes) to avoid PowerShell
-    # stripping quotes when passing to native commands.
-    $namedMounts = & $dockerCmd.Source inspect `
-        --format '{{range .Mounts}}{{.Name}}:{{.Destination}} {{end}}' `
-        $ContainerName 2>$null
-    $bindMounts  = & $dockerCmd.Source inspect `
-        --format '{{range .Mounts}}{{.Source}}:{{.Destination}} {{end}}' `
-        $ContainerName 2>$null
+    # Docker Desktop (Windows/Mac) rewrites host paths to internal Linux-style
+    # paths (e.g. /run/desktop/mnt/host/d/...), so comparing source paths is
+    # unreliable.  Instead we compare only destination (container-side) paths,
+    # plus the named-volume name for the root volume.
 
-    # Named volume check
-    if ($namedMounts -notlike "*${VolumeName}:/root*") { return $false }
+    $mountJson = & $dockerCmd.Source inspect --format '{{range .Mounts}}{{.Name}}|{{.Destination}} {{end}}' $ContainerName 2>$null
 
-    # Bind-mount checks for any extra mounts in the profile
+    # Named volume: verify the root volume name is correct
+    if ($mountJson -notlike "*${VolumeName}|/root*") { return $false }
+
+    # Extra bind mounts: check that each expected container-side path is present
     foreach ($mount in $VolumeMounts) {
-        if ($bindMounts -notlike "*${mount}*") { return $false }
+        # $mount is "host_path:container_path" — grab the container path
+        $containerPath = ($mount -split ':', 2)[1]
+        if (-not $containerPath) { continue }
+        if ($mountJson -notlike "*|${containerPath} *") { return $false }
     }
+
+    # Also verify total mount count matches to detect stale extra mounts.
+    # Expected: root volume + docker.sock + each extra mount
+    $expectedCount = 2 + $VolumeMounts.Count
+    $actualCount   = ([regex]::Matches($mountJson, '\|')).Count
+    if ($actualCount -ne $expectedCount) { return $false }
+
     return $true
 }
 

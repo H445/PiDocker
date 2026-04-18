@@ -9,27 +9,38 @@ IMAGE_FULL="${IMAGE_NAME}:${IMAGE_TAG}"
 # ── helper: check if container's mounts match what the profile requires ────────
 container_mounts_match() {
     local container="$1"
-    # Use .Name for named volumes, .Source for bind mounts — avoids comparing
-    # raw host paths like /var/lib/docker/volumes/... against the volume name
-    local actual_mounts
-    actual_mounts="$(docker inspect --format \
-        '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}}{{else}}{{.Source}}{{end}}:{{.Destination}} {{end}}' \
+    # Docker Desktop rewrites host paths to internal Linux-style paths
+    # (e.g. /run/desktop/mnt/host/d/...), so comparing source paths is
+    # unreliable.  Compare only destination paths + named-volume name.
+    local mount_info
+    mount_info="$(docker inspect --format \
+        '{{range .Mounts}}{{.Name}}|{{.Destination}} {{end}}' \
         "$container" 2>/dev/null)"
 
-    # Named volume
-    if [[ "$actual_mounts" != *"${VOLUME_NAME}:/root"* ]]; then
+    # Named volume check
+    if [[ "$mount_info" != *"${VOLUME_NAME}|/root"* ]]; then
         return 1
     fi
 
-    # Extra VOLUME_MOUNTS from profile
+    # Extra bind mounts: check container-side destination paths
     for mount_spec in "${VOLUME_MOUNT_ARGS[@]}"; do
-        # VOLUME_MOUNT_ARGS entries are: "-v" "host:ctn" alternating
-        # Skip the "-v" entries, check the path entries
         [[ "$mount_spec" == "-v" ]] && continue
-        if [[ "$actual_mounts" != *"${mount_spec}"* ]]; then
+        # mount_spec is "host_path:container_path" — grab container path
+        local ctn_path="${mount_spec#*:}"
+        if [[ "$mount_info" != *"|${ctn_path} "* ]]; then
             return 1
         fi
     done
+
+    # Verify total mount count to detect stale extra mounts
+    # Expected: root volume + docker.sock + each extra mount
+    local expected_count=$(( 2 + ${#VOLUME_MOUNT_ARGS[@]} / 2 ))
+    local actual_count
+    actual_count="$(echo "$mount_info" | grep -o '|' | wc -l)"
+    if [[ "$actual_count" -ne "$expected_count" ]]; then
+        return 1
+    fi
+
     return 0
 }
 
