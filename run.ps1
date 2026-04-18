@@ -27,6 +27,7 @@ function Show-Menu {
     Write-Host '  [5] Backup management'                             -ForegroundColor Magenta
     Write-Host '  [6] Container management'                          -ForegroundColor DarkYellow
     Write-Host '  [7] Setup / switch profile'                        -ForegroundColor Cyan
+    Write-Host '  [8] Update pi'                                     -ForegroundColor Yellow
     Write-Host '  [Q] Quit'                                          -ForegroundColor DarkGray
     Write-Host ''
 }
@@ -319,6 +320,23 @@ function Invoke-LaunchWithExtensions {
     docker exec -it $CONTAINER pi @extArgs
 }
 
+# ── update pi ──────────────────────────────────────────────────────────────────
+
+function Invoke-UpdatePi {
+    if (-not (Assert-ContainerRunning)) { return }
+
+    Write-Host '  Updating pi coding agent inside the container...' -ForegroundColor Cyan
+    Write-Host ''
+    docker exec -it $CONTAINER bash -c 'cd /app && git pull && npm install && npm --workspace packages/tui run build && npm --workspace packages/ai run build && npm --workspace packages/agent run build && npm --workspace packages/coding-agent run build'
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host ''
+        Write-Host '  pi has been updated successfully.' -ForegroundColor Green
+    } else {
+        Write-Host ''
+        Write-Host '  Update failed. Check the output above for errors.' -ForegroundColor Red
+    }
+}
+
 # ── main loop ──────────────────────────────────────────────────────────────────
 
 while ($true) {
@@ -334,13 +352,14 @@ while ($true) {
         '5' { Invoke-BackupMenu; break }
         '6' { Invoke-ContainerMenu; break }
         '7' { Invoke-Script 'setup.ps1'; break }
+        '8' { Invoke-UpdatePi; break }
         'Q' { Write-Host '  Bye.'; exit 0 }
         default { Write-Host '  Unknown option.' -ForegroundColor Red; break }
     }
 
     # Pause after output-producing actions so results aren't erased by Clear-Host.
     # Submenus (5, 6) handle their own flow — no extra pause needed.
-    if ($choice -notin '5','6','7','Q') {
+    if ($choice -notin '5','6','7','8','Q') {
         Write-Host ''
         Read-Host '  Press Enter to return to menu'
     }

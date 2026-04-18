@@ -27,6 +27,7 @@ show_menu() {
     echo "  [5] Backup management"
     echo "  [6] Container management"
     echo "  [7] Setup / switch profile"
+    echo "  [8] Update pi"
     echo "  [Q] Quit"
     echo
 }
@@ -341,6 +342,23 @@ launch_with_extensions() {
     docker exec -it "$CONTAINER" pi "${ext_args[@]}"
 }
 
+# ── update pi ──────────────────────────────────────────────────────────────────
+
+update_pi() {
+    assert_container_running || return 0
+
+    echo "  Updating pi coding agent inside the container..."
+    echo
+    docker exec -it "$CONTAINER" bash -c 'cd /app && git pull && npm install && npm --workspace packages/tui run build && npm --workspace packages/ai run build && npm --workspace packages/agent run build && npm --workspace packages/coding-agent run build'
+    if [[ $? -eq 0 ]]; then
+        echo
+        echo "  pi has been updated successfully."
+    else
+        echo
+        echo "  Update failed. Check the output above for errors."
+    fi
+}
+
 # ── main loop ──────────────────────────────────────────────────────────────────
 
 while true; do
@@ -357,6 +375,7 @@ while true; do
         5) backup_management_menu ;;
         6) container_management_menu ;;
         7) invoke_script "setup.sh" ;;
+        8) update_pi ;;
         Q) echo "  Bye."; exit 0 ;;
         *) echo "  Unknown option." ;;
     esac
@@ -364,7 +383,7 @@ while true; do
     # Pause after output-producing actions so results aren't erased by clear.
     # Submenus (5, 6) handle their own flow — no extra pause needed.
     case "$choice" in
-        5|6|7|Q) ;;
+        5|6|7|8|Q) ;;
         *) echo; read -r -p "  Press Enter to return to menu" ;;
     esac
 done
