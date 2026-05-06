@@ -33,6 +33,7 @@ docker run -d \
     --name "${CONTAINER_NAME}" \
     -v "${VOLUME_NAME}":/root \
     -v /var/run/docker.sock:/var/run/docker.sock \
+    "${PORT_MAPPING_ARGS[@]}" \
     "${IMAGE_NAME}:${IMAGE_TAG}" \
     tail -f /dev/null
 

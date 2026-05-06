@@ -42,6 +42,7 @@ docker run -d `
     --name $ContainerName `
     -v "${VolumeName}:/root" `
     -v '/var/run/docker.sock:/var/run/docker.sock' `
+    @PortMappingArgs `
     $tag `
     tail -f /dev/null
 

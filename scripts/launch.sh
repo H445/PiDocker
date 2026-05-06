@@ -6,7 +6,7 @@ source "$SCRIPT_DIR/_config.sh"
 
 IMAGE_FULL="${IMAGE_NAME}:${IMAGE_TAG}"
 
-# ── Mount-config fingerprint ──────────────────────────────────────────────────
+# ── Runtime-config fingerprint ────────────────────────────────────────────────
 # Instead of inspecting Docker (which rewrites paths on Docker Desktop),
 # save a fingerprint file when creating/recreating the container and compare
 # it on the next launch.
@@ -23,6 +23,10 @@ get_mount_fingerprint() {
     for mount_spec in "${VOLUME_MOUNT_ARGS[@]}"; do
         [[ "$mount_spec" == "-v" ]] && continue
         echo "bind=$mount_spec"
+    done | sort
+    for port_spec in "${PORT_MAPPING_ARGS[@]}"; do
+        [[ "$port_spec" == "-p" ]] && continue
+        echo "port=$port_spec"
     done | sort
 }
 
@@ -46,6 +50,7 @@ docker_run() {
         -v "${VOLUME_NAME}:/root" \
         -v /var/run/docker.sock:/var/run/docker.sock \
         "${VOLUME_MOUNT_ARGS[@]}" \
+        "${PORT_MAPPING_ARGS[@]}" \
         "${IMAGE_FULL}" \
         tail -f /dev/null
     # Save fingerprint so next launch knows the config hasn't changed
@@ -54,13 +59,13 @@ docker_run() {
 
 # ── main ──────────────────────────────────────────────────────────────────────
 if docker ps -a --filter "name=^${CONTAINER_NAME}$" --format '{{.Names}}' | grep -q "${CONTAINER_NAME}"; then
-    # Container exists — compare saved mount fingerprint to current config
+    # Container exists — compare saved runtime fingerprint to current config
     if ! mount_fingerprint_matches; then
-        echo "Container '${CONTAINER_NAME}' mount config has changed. Recreating..."
+        echo "Container '${CONTAINER_NAME}' runtime config has changed (mounts/ports). Recreating..."
         docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1
         docker_run
     else
-        # Mounts are correct — just make sure it's running
+        # Runtime config is correct — just make sure it's running
         docker start "${CONTAINER_NAME}" >/dev/null 2>&1 || true
 
         state="$(docker inspect -f '{{.State.Running}}' "${CONTAINER_NAME}" 2>/dev/null || true)"

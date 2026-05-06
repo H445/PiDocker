@@ -37,8 +37,10 @@ Run `./setup.sh` (or `.\setup.ps1`) to walk through a step-by-step wizard:
 
 1. **Profile name** — Give your configuration a name (e.g. `default`, `work`, `test`)
 2. **Docker settings** — Image name, tag, container name, volume name (sensible defaults provided)
-3. **Review** — Confirm your settings
-4. **Build** — Build the Docker image and start the container
+3. **Volume mounts** *(optional)* — Map host folders into the container
+4. **Port mappings** *(optional)* — Publish container ports to the host (`host:container[/tcp|udp]`)
+5. **Review** — Confirm your settings
+6. **Build** — Build the Docker image and start the container
 
 If profiles already exist, setup shows them and lets you create new ones, switch, edit, delete, or rebuild.
 
@@ -117,6 +119,18 @@ Extensions are installed to `~/.pi/extensions/` and will be available for use in
 ## Configuration
 
 Pi stores its configuration in `~/.pi/` inside the container. On first launch, it will prompt you to set up your LLM provider and API key. This is automatically persisted in the named volume.
+
+Profiles also support optional Docker runtime overrides:
+
+- `VOLUME_MOUNTS` — Semicolon-separated bind mounts (`host_path:container_path`)
+- `PORT_MAPPINGS` — Semicolon-separated published ports (`host_port:container_port[/tcp|udp]`)
+
+Example:
+
+```conf
+VOLUME_MOUNTS=C:\Users\me\projects:/workspace;C:\Users\me\data:/data
+PORT_MAPPINGS=3000:3000;8080:80;5353:53/udp
+```
 
 ### Built-in Providers
 

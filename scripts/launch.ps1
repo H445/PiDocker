@@ -14,8 +14,8 @@ if (-not $dockerCmd) {
     Write-Error "Docker was not found in PATH. Install Docker Desktop and ensure 'docker' is available."
 }
 
-# ── Mount-config fingerprint ──────────────────────────────────────────────────
-# Build a canonical string that represents the current mount configuration.
+# ── Runtime-config fingerprint ────────────────────────────────────────────────
+# Build a canonical string that represents the current mount+port configuration.
 # We save this to a file when creating/recreating the container and compare it
 # on the next launch.  This avoids all the issues with docker inspect returning
 # rewritten paths on Docker Desktop (Windows/Mac).
@@ -27,10 +27,13 @@ $_configDir = if (Test-Path (Join-Path $PSScriptRoot 'configs')) {
 $_mountFingerprintFile = Join-Path $_configDir ".mounts_${ContainerName}"
 
 function Get-MountFingerprint {
-    # Deterministic string: volume name + sorted extra mounts
+    # Deterministic string: volume + sorted extra mounts + sorted published ports
     $parts = @("volume=${VolumeName}:/root")
     foreach ($m in ($VolumeMounts | Sort-Object)) {
         $parts += "bind=$m"
+    }
+    foreach ($p in ($PortMappings | Sort-Object)) {
+        $parts += "port=$p"
     }
     return ($parts -join "`n")
 }
@@ -62,12 +65,20 @@ foreach ($mount in $VolumeMounts) {
     $extraVolArgs += $mount
 }
 
+# Build extra -p args from PORT_MAPPINGS defined in the profile
+$extraPortArgs = @()
+foreach ($mapping in $PortMappings) {
+    $extraPortArgs += '-p'
+    $extraPortArgs += $mapping
+}
+
 # Helper: run docker run with all volume args
 function Invoke-DockerRun {
     & $dockerCmd.Source run -d --name $ContainerName `
         -v "${VolumeName}:/root" `
         -v '/var/run/docker.sock:/var/run/docker.sock' `
         @extraVolArgs `
+        @extraPortArgs `
         "${ImageName}:${ImageTag}" 'tail' '-f' '/dev/null' | Out-Null
     # Save fingerprint so next launch knows the config hasn't changed
     Save-MountFingerprint
@@ -75,16 +86,16 @@ function Invoke-DockerRun {
 
 # ── main ──────────────────────────────────────────────────────────────────────
 if ($existing -contains $ContainerName) {
-    # Container exists — compare saved mount fingerprint to current config
+    # Container exists — compare saved runtime fingerprint to current config
     if (-not (Test-MountFingerprintMatch)) {
-        Write-Host "Container '$ContainerName' mount config has changed. Recreating..." -ForegroundColor Yellow
+        Write-Host "Container '$ContainerName' runtime config has changed (mounts/ports). Recreating..." -ForegroundColor Yellow
         & $dockerCmd.Source rm -f $ContainerName | Out-Null
         Invoke-DockerRun
         if ($LASTEXITCODE -ne 0) {
             Write-Error "Failed to recreate container '$ContainerName'. Run setup to build the image first."
         }
     } else {
-        # Mounts are correct — just make sure it's running
+        # Runtime config is correct — just make sure it's running
         & $dockerCmd.Source start $ContainerName 2>$null | Out-Null
 
         $state = & $dockerCmd.Source inspect -f '{{.State.Running}}' $ContainerName 2>$null

@@ -31,6 +31,37 @@ read_profile_value() {
     grep "^${key}=" "$file" 2>/dev/null | head -1 | cut -d'=' -f2-
 }
 
+is_valid_port_mapping() {
+    local mapping="$1"
+    [[ "$mapping" =~ ^([0-9]{1,5}):([0-9]{1,5})(/(tcp|udp))?$ ]] || return 1
+
+    local host_port="${BASH_REMATCH[1]}"
+    local ctn_port="${BASH_REMATCH[2]}"
+    (( host_port >= 1 && host_port <= 65535 )) || return 1
+    (( ctn_port >= 1 && ctn_port <= 65535 )) || return 1
+    return 0
+}
+
+has_port_mapping_conflict() {
+    local candidate="$1"
+    local -n _ports_ref=$2
+
+    IFS='/' read -r cand_base cand_proto <<< "$candidate"
+    cand_proto="${cand_proto:-tcp}"
+    local cand_host="${cand_base%%:*}"
+
+    local p base proto host
+    for p in "${_ports_ref[@]}"; do
+        IFS='/' read -r base proto <<< "$p"
+        proto="${proto:-tcp}"
+        host="${base%%:*}"
+        if [[ "$host" == "$cand_host" && "${proto,,}" == "${cand_proto,,}" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 get_docker_status() {
     local container="$1" volume="$2"
 
@@ -159,6 +190,76 @@ edit_volume_mounts() {
     done
 }
 
+# ── port mappings sub-menu ─────────────────────────────────────────────────────
+
+# edit_port_mappings <nameref-array>
+# Caller passes the name of an array variable to use as input/output.
+edit_port_mappings() {
+    local -n _ports_ref=$1
+
+    while true; do
+        echo
+        echo "  Port Mappings"
+        echo "  -------------"
+        echo "  Publish container ports to host (host_port:container_port[/tcp|udp])."
+        echo
+
+        if (( ${#_ports_ref[@]} == 0 )); then
+            echo "  (none)"
+        else
+            local i=1
+            for p in "${_ports_ref[@]}"; do
+                echo "  $i. $p"
+                ((i++))
+            done
+        fi
+
+        echo
+        echo "  [A] Add mapping   [R] Remove mapping   [C] Clear all   [K] Keep / done"
+        echo
+        read -r -p "  Select: " action
+        action="${action^^}"
+
+        case "$action" in
+            A)
+                read -r -p "  Mapping (e.g. 3000:3000 or 5353:53/udp): " mapping
+                mapping="$(echo "$mapping" | xargs)"
+                [[ -z "$mapping" ]] && echo "  Canceled." && continue
+                if ! is_valid_port_mapping "$mapping"; then
+                    echo "  Invalid mapping format. Use host:container[/tcp|udp], ports 1-65535."
+                    continue
+                fi
+                if has_port_mapping_conflict "$mapping" _ports_ref; then
+                    echo "  Host port/protocol already mapped in this profile."
+                    continue
+                fi
+                _ports_ref+=("$mapping")
+                echo "  ✓ Added: $mapping"
+                ;;
+            R)
+                if (( ${#_ports_ref[@]} == 0 )); then echo "  Nothing to remove."; continue; fi
+                read -r -p "  Enter mapping number to remove: " num
+                if [[ "$num" =~ ^[0-9]+$ ]]; then
+                    local ridx=$((num - 1))
+                    if (( ridx >= 0 && ridx < ${#_ports_ref[@]} )); then
+                        local removed="${_ports_ref[$ridx]}"
+                        _ports_ref=("${_ports_ref[@]:0:$ridx}" "${_ports_ref[@]:$((ridx+1))}")
+                        echo "  ✓ Removed: $removed"
+                    else
+                        echo "  Invalid number."
+                    fi
+                fi
+                ;;
+            C)
+                _ports_ref=()
+                echo "  ✓ All mappings cleared."
+                ;;
+            K) return ;;
+            *) echo "  Unknown option." ;;
+        esac
+    done
+}
+
 # ── wizard: create & build ─────────────────────────────────────────────────────
 
 setup_wizard() {
@@ -212,9 +313,17 @@ setup_wizard() {
     local -a mounts=()
     edit_volume_mounts mounts
 
-    # ── Step 4: Review ──
+    # ── Step 4: Port mappings ──
     echo
-    echo "  Step 4 — Review"
+    echo "  Step 4 — Port Mappings"
+    echo "  ----------------------"
+    echo "  Optionally publish container ports to your host machine."
+    local -a ports=()
+    edit_port_mappings ports
+
+    # ── Step 5: Review ──
+    echo
+    echo "  Step 5 — Review"
     echo "  ---------------"
     echo
     echo "  Profile:   $name"
@@ -226,6 +335,12 @@ setup_wizard() {
         for m in "${mounts[@]}"; do echo "    - $m"; done
     else
         echo "  Mounts:    (none)"
+    fi
+    if (( ${#ports[@]} > 0 )); then
+        echo "  Ports:"
+        for p in "${ports[@]}"; do echo "    - $p"; done
+    else
+        echo "  Ports:     (none)"
     fi
     echo
 
@@ -243,14 +358,18 @@ setup_wizard() {
             local IFS=';'
             printf "VOLUME_MOUNTS=%s\n" "${mounts[*]}"
         fi
+        if (( ${#ports[@]} > 0 )); then
+            local IFS=';'
+            printf "PORT_MAPPINGS=%s\n" "${ports[*]}"
+        fi
     } > "$conf_file"
     echo "$name" > "$ACTIVE_FILE"
     echo
     echo "  ✓ Profile '$name' saved and set as active."
 
-    # ── Step 5: Build ──
+    # ── Step 6: Build ──
     echo
-    echo "  Step 5 — Build"
+    echo "  Step 6 — Build"
     echo "  --------------"
     echo
 
@@ -313,17 +432,24 @@ edit_profile() {
     local name="${profiles[$idx]}"
     local file="$CONFIG_DIR/${name}.conf"
 
-    local old_img old_tag old_ctn old_vol old_mounts_str
+    local old_img old_tag old_ctn old_vol old_mounts_str old_ports_str
     old_img=$(read_profile_value "$file" "IMAGE_NAME")
     old_tag=$(read_profile_value "$file" "IMAGE_TAG")
     old_ctn=$(read_profile_value "$file" "CONTAINER_NAME")
     old_vol=$(read_profile_value "$file" "VOLUME_NAME")
     old_mounts_str=$(read_profile_value "$file" "VOLUME_MOUNTS")
+    old_ports_str=$(read_profile_value "$file" "PORT_MAPPINGS")
 
     # Split existing mounts on semicolons
     local -a old_mounts=()
     if [[ -n "$old_mounts_str" ]]; then
         IFS=';' read -ra old_mounts <<< "$old_mounts_str"
+    fi
+
+    # Split existing port mappings on semicolons
+    local -a old_ports=()
+    if [[ -n "$old_ports_str" ]]; then
+        IFS=';' read -ra old_ports <<< "$old_ports_str"
     fi
 
     echo
@@ -354,12 +480,27 @@ edit_profile() {
     local -a mounts=("${old_mounts[@]}")
     edit_volume_mounts mounts
 
+    echo
+    echo "  Port Mappings"
+    echo "  Current:"
+    if (( ${#old_ports[@]} > 0 )); then
+        for p in "${old_ports[@]}"; do echo "    - $p"; done
+    else
+        echo "    (none)"
+    fi
+    local -a ports=("${old_ports[@]}")
+    edit_port_mappings ports
+
     {
         printf "IMAGE_NAME=%s\nIMAGE_TAG=%s\nCONTAINER_NAME=%s\nVOLUME_NAME=%s\n" \
             "$img" "$tag" "$ctn" "$vol"
         if (( ${#mounts[@]} > 0 )); then
             local IFS=';'
             printf "VOLUME_MOUNTS=%s\n" "${mounts[*]}"
+        fi
+        if (( ${#ports[@]} > 0 )); then
+            local IFS=';'
+            printf "PORT_MAPPINGS=%s\n" "${ports[*]}"
         fi
     } > "$file"
 

@@ -2,7 +2,8 @@
 # Shared config loader — dot-source this from any script:
 #   . "$PSScriptRoot\_config.ps1"   (from scripts/)
 #   . "$scriptDir\scripts\_config.ps1"  (from root)
-# Provides: $ImageName, $ImageTag, $ContainerName, $VolumeName, $ActiveProfile
+# Provides: $ImageName, $ImageTag, $ContainerName, $VolumeName, $ActiveProfile,
+#           $VolumeMounts, $PortMappings, $PortMappingArgs
 
 # $PSScriptRoot in a dot-sourced file equals the CALLING script's PSScriptRoot.
 # Callers may be in root/ (run.ps1) or scripts/ (build.ps1 etc.).
@@ -52,5 +53,19 @@ $VolumeName    = $VOLUME_NAME
 $VolumeMounts = @()
 if ($VOLUME_MOUNTS) {
     $VolumeMounts = $VOLUME_MOUNTS -split ';' | Where-Object { $_.Trim() -ne '' } | ForEach-Object { $_.Trim() }
+}
+
+# Parse PORT_MAPPINGS (semicolon-separated list of host:container[/tcp|udp])
+# Example in .conf:  PORT_MAPPINGS=3000:3000;5353:53/udp
+$PortMappings = @()
+if ($PORT_MAPPINGS) {
+    $PortMappings = $PORT_MAPPINGS -split ';' | Where-Object { $_.Trim() -ne '' } | ForEach-Object { $_.Trim() }
+}
+
+# Expand port mappings into docker run args: -p <mapping>
+$PortMappingArgs = @()
+foreach ($mapping in $PortMappings) {
+    $PortMappingArgs += '-p'
+    $PortMappingArgs += $mapping
 }
 

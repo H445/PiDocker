@@ -42,6 +42,13 @@ function Get-AllProfiles {
                          Where-Object { $_.Trim() -ne '' } |
                          ForEach-Object { $_.Trim() }
         }
+        # Parse PORT_MAPPINGS into an array (host_port:container_port[/tcp|udp])
+        $portList = @()
+        if ($cfg['PORT_MAPPINGS']) {
+            $portList = $cfg['PORT_MAPPINGS'] -split ';' |
+                        Where-Object { $_.Trim() -ne '' } |
+                        ForEach-Object { $_.Trim() }
+        }
         $profiles += [PSCustomObject]@{
             Name          = $name
             ImageName     = $cfg['IMAGE_NAME']
@@ -49,10 +56,44 @@ function Get-AllProfiles {
             ContainerName = $cfg['CONTAINER_NAME']
             VolumeName    = $cfg['VOLUME_NAME']
             VolumeMounts  = $mountList
+            PortMappings  = $portList
             FilePath      = $f.FullName
         }
     }
     return $profiles
+}
+
+function Test-PortMappingFormat {
+    param([string]$Mapping)
+
+    if ($Mapping -notmatch '^(\d{1,5}):(\d{1,5})(/(tcp|udp))?$') { return $false }
+
+    $hostPort = [int]$Matches[1]
+    $ctnPort  = [int]$Matches[2]
+    return ($hostPort -ge 1 -and $hostPort -le 65535 -and $ctnPort -ge 1 -and $ctnPort -le 65535)
+}
+
+function Test-PortMappingConflict {
+    param(
+        [string[]]$Mappings,
+        [string]$Candidate,
+        [int]$IgnoreIndex = -1
+    )
+
+    if ($Candidate -notmatch '^(\d{1,5}):(\d{1,5})(/(tcp|udp))?$') { return $false }
+    $candidateHost  = $Matches[1]
+    $candidateProto = if ($Matches[4]) { $Matches[4].ToLower() } else { 'tcp' }
+
+    for ($i = 0; $i -lt $Mappings.Count; $i++) {
+        if ($i -eq $IgnoreIndex) { continue }
+        $m = $Mappings[$i]
+        if ($m -notmatch '^(\d{1,5}):(\d{1,5})(/(tcp|udp))?$') { continue }
+        $host  = $Matches[1]
+        $proto = if ($Matches[4]) { $Matches[4].ToLower() } else { 'tcp' }
+        if ($host -eq $candidateHost -and $proto -eq $candidateProto) { return $true }
+    }
+
+    return $false
 }
 
 function Get-DockerStatus {
@@ -174,6 +215,75 @@ function Invoke-EditVolumeMounts {
     }
 }
 
+# ── port mappings sub-menu ─────────────────────────────────────────────────────
+
+function Invoke-EditPortMappings {
+    param([string[]]$Current = @())
+
+    $ports = [System.Collections.Generic.List[string]]($Current)
+
+    while ($true) {
+        Write-Host ''
+        Write-Host '  Port Mappings' -ForegroundColor Yellow
+        Write-Host '  -------------' -ForegroundColor DarkGray
+        Write-Host '  Publish container ports to host (host_port:container_port[/tcp|udp]).' -ForegroundColor DarkGray
+        Write-Host ''
+
+        if ($ports.Count -eq 0) {
+            Write-Host '  (none)' -ForegroundColor DarkGray
+        } else {
+            $i = 1
+            foreach ($p in $ports) {
+                Write-Host "  $i. $p"
+                $i++
+            }
+        }
+
+        Write-Host ''
+        Write-Host '  [A] Add mapping   [R] Remove mapping   [C] Clear all   [K] Keep / done' -ForegroundColor DarkGray
+        Write-Host ''
+
+        $action = (Read-Host '  Select').Trim().ToUpper()
+
+        switch ($action) {
+            'A' {
+                $mapping = (Read-Host '  Mapping (e.g. 3000:3000 or 5353:53/udp)').Trim()
+                if (-not $mapping) { Write-Host '  Canceled.' -ForegroundColor DarkYellow; break }
+                if (-not (Test-PortMappingFormat -Mapping $mapping)) {
+                    Write-Host '  Invalid mapping format. Use host:container[/tcp|udp], ports 1-65535.' -ForegroundColor Red
+                    break
+                }
+                if (Test-PortMappingConflict -Mappings $ports.ToArray() -Candidate $mapping) {
+                    Write-Host '  Host port/protocol already mapped in this profile.' -ForegroundColor Red
+                    break
+                }
+                $ports.Add($mapping)
+                Write-Host "  ✓ Added: $mapping" -ForegroundColor Green
+            }
+            'R' {
+                if ($ports.Count -eq 0) { Write-Host '  Nothing to remove.' -ForegroundColor DarkYellow; break }
+                $num = (Read-Host '  Enter mapping number to remove').Trim()
+                if ($num -match '^\d+$') {
+                    $ridx = [int]$num - 1
+                    if ($ridx -ge 0 -and $ridx -lt $ports.Count) {
+                        $removed = $ports[$ridx]
+                        $ports.RemoveAt($ridx)
+                        Write-Host "  ✓ Removed: $removed" -ForegroundColor Green
+                    } else {
+                        Write-Host '  Invalid number.' -ForegroundColor Red
+                    }
+                }
+            }
+            'C' {
+                $ports.Clear()
+                Write-Host '  ✓ All mappings cleared.' -ForegroundColor Green
+            }
+            'K' { return ,$ports.ToArray() }
+            default { Write-Host '  Unknown option.' -ForegroundColor Red }
+        }
+    }
+}
+
 # ── wizard: create & build ─────────────────────────────────────────────────────
 
 function Invoke-SetupWizard {
@@ -225,9 +335,16 @@ function Invoke-SetupWizard {
     Write-Host '  Optionally map host folders into the container.' -ForegroundColor DarkGray
     $mounts = Invoke-EditVolumeMounts -Current @()
 
-    # ── Step 4: Review ──
+    # ── Step 4: Port mappings ──
     Write-Host ''
-    Write-Host '  Step 4 — Review' -ForegroundColor Yellow
+    Write-Host '  Step 4 — Port Mappings' -ForegroundColor Yellow
+    Write-Host '  ----------------------' -ForegroundColor DarkGray
+    Write-Host '  Optionally publish container ports to your host machine.' -ForegroundColor DarkGray
+    $ports = Invoke-EditPortMappings -Current @()
+
+    # ── Step 5: Review ──
+    Write-Host ''
+    Write-Host '  Step 5 — Review' -ForegroundColor Yellow
     Write-Host '  ---------------' -ForegroundColor DarkGray
     Write-Host ''
     Write-Host "  Profile:   $name"
@@ -240,6 +357,12 @@ function Invoke-SetupWizard {
     } else {
         Write-Host "  Mounts:    (none)"
     }
+    if ($ports.Count -gt 0) {
+        Write-Host "  Ports:"
+        foreach ($p in $ports) { Write-Host "    - $p" }
+    } else {
+        Write-Host "  Ports:     (none)"
+    }
     Write-Host ''
 
     $confirm = (Read-Host '  Look good? (Y/n)').Trim().ToUpper()
@@ -250,20 +373,21 @@ function Invoke-SetupWizard {
 
     # Save config
     $mountsLine = if ($mounts.Count -gt 0) { "`nVOLUME_MOUNTS=$($mounts -join ';')" } else { '' }
+    $portsLine  = if ($ports.Count -gt 0)  { "`nPORT_MAPPINGS=$($ports -join ';')" } else { '' }
     $content = @"
 IMAGE_NAME=$img
 IMAGE_TAG=$tag
 CONTAINER_NAME=$ctn
-VOLUME_NAME=$vol$mountsLine
+VOLUME_NAME=$vol$mountsLine$portsLine
 "@
     Set-Content -Path $confPath -Value $content -NoNewline
     Set-Content -Path $activeFile -Value $name -NoNewline
     Write-Host ''
     Write-Host "  ✓ Profile '$name' saved and set as active." -ForegroundColor Green
 
-    # ── Step 5: Build ──
+    # ── Step 6: Build ──
     Write-Host ''
-    Write-Host '  Step 5 — Build' -ForegroundColor Yellow
+    Write-Host '  Step 6 — Build' -ForegroundColor Yellow
     Write-Host '  --------------' -ForegroundColor DarkGray
     Write-Host ''
 
@@ -356,12 +480,23 @@ function Invoke-EditProfile {
     }
     $mounts = Invoke-EditVolumeMounts -Current $p.VolumeMounts
 
+    Write-Host ''
+    Write-Host '  Port Mappings' -ForegroundColor Yellow
+    Write-Host '  Current:' -ForegroundColor DarkGray
+    if ($p.PortMappings.Count -gt 0) {
+        $p.PortMappings | ForEach-Object { Write-Host "    - $_" -ForegroundColor DarkGray }
+    } else {
+        Write-Host '    (none)' -ForegroundColor DarkGray
+    }
+    $ports = Invoke-EditPortMappings -Current $p.PortMappings
+
     $mountsLine = if ($mounts.Count -gt 0) { "`nVOLUME_MOUNTS=$($mounts -join ';')" } else { '' }
+    $portsLine  = if ($ports.Count -gt 0)  { "`nPORT_MAPPINGS=$($ports -join ';')" } else { '' }
     $content = @"
 IMAGE_NAME=$img
 IMAGE_TAG=$tag
 CONTAINER_NAME=$ctn
-VOLUME_NAME=$vol$mountsLine
+VOLUME_NAME=$vol$mountsLine$portsLine
 "@
     Set-Content -Path $p.FilePath -Value $content -NoNewline
     Write-Host ''
