@@ -325,16 +325,33 @@ function Invoke-LaunchWithExtensions {
 function Invoke-UpdatePi {
     if (-not (Assert-ContainerRunning)) { return }
 
+    $currentVersion = docker exec $CONTAINER pi --version 2>&1 |
+        ForEach-Object { "$_" } |
+        Select-Object -First 1
+
     Write-Host '  Updating pi coding agent inside the container...' -ForegroundColor Cyan
+    if ($currentVersion) {
+        Write-Host "  Current version:   $($currentVersion.Trim())" -ForegroundColor DarkGray
+    }
     Write-Host ''
-    docker exec -it $CONTAINER bash -c 'cd /app && git pull && npm install && npm --workspace packages/tui run build && npm --workspace packages/ai run build && npm --workspace packages/agent run build && npm --workspace packages/coding-agent run build'
-    if ($LASTEXITCODE -eq 0) {
+    docker exec -it $CONTAINER sh -lc 'npm install -g --force @mariozechner/pi-coding-agent@latest'
+    $updateExitCode = $LASTEXITCODE
+    if ($updateExitCode -eq 0) {
+        $installedVersion = docker exec $CONTAINER pi --version 2>&1 |
+            ForEach-Object { "$_" } |
+            Select-Object -First 1
         Write-Host ''
+        if ($installedVersion) {
+            Write-Host "  Installed version: $($installedVersion.Trim())" -ForegroundColor DarkGray
+            Write-Host ''
+        }
         Write-Host '  pi has been updated successfully.' -ForegroundColor Green
     } else {
         Write-Host ''
         Write-Host '  Update failed. Check the output above for errors.' -ForegroundColor Red
     }
+
+    $global:LASTEXITCODE = $updateExitCode
 }
 
 # ── main loop ──────────────────────────────────────────────────────────────────
@@ -359,7 +376,7 @@ while ($true) {
 
     # Pause after output-producing actions so results aren't erased by Clear-Host.
     # Submenus (5, 6) handle their own flow — no extra pause needed.
-    if ($choice -notin '5','6','7','8','Q') {
+    if ($choice -notin '5','6','7','Q') {
         Write-Host ''
         Read-Host '  Press Enter to return to menu'
     }

@@ -7,13 +7,24 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\_config.ps1"
 
 $tag = "$ImageName`:$ImageTag"
+$piPackageName = '@mariozechner/pi-coding-agent'
 
 Write-Host "Building Docker image: $tag"
+Write-Host "Installing latest published pi package during build: $piPackageName@latest"
 
-docker build -t $tag .
+docker build --pull --no-cache `
+    --build-arg 'PI_PACKAGE_NAME=@mariozechner/pi-coding-agent' `
+    --build-arg 'PI_PACKAGE_VERSION=latest' `
+    -t $tag .
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "✓ Image built successfully: $tag"
+    $imageVersion = docker run --rm $tag pi --version 2>&1 |
+        ForEach-Object { "$_" } |
+        Select-Object -First 1
+    if ($imageVersion) {
+        Write-Host "  Image pi version: $($imageVersion.Trim())" -ForegroundColor DarkGray
+    }
 } else {
     Write-Host "✗ Build failed" -ForegroundColor Red
     exit 1
@@ -48,6 +59,12 @@ docker run -d `
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "✓ Container started successfully"
+    $containerVersion = docker exec $ContainerName pi --version 2>&1 |
+        ForEach-Object { "$_" } |
+        Select-Object -First 1
+    if ($containerVersion) {
+        Write-Host "  Container pi version: $($containerVersion.Trim())" -ForegroundColor DarkGray
+    }
     Write-Host ''
     Write-Host "Next steps:"
     Write-Host "  1. Configure local providers (optional): .\run.ps1 → [4]"

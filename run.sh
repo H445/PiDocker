@@ -347,16 +347,27 @@ launch_with_extensions() {
 update_pi() {
     assert_container_running || return 0
 
+    local current_version
+    current_version="$(docker exec "$CONTAINER" pi --version 2>&1 | head -n 1)"
+
     echo "  Updating pi coding agent inside the container..."
+    [[ -n "$current_version" ]] && echo "  Current version:   $current_version"
     echo
-    docker exec -it "$CONTAINER" bash -c 'cd /app && git pull && npm install && npm --workspace packages/tui run build && npm --workspace packages/ai run build && npm --workspace packages/agent run build && npm --workspace packages/coding-agent run build'
-    if [[ $? -eq 0 ]]; then
+    docker exec -it "$CONTAINER" sh -lc 'npm install -g --force @mariozechner/pi-coding-agent@latest'
+    local status=$?
+    if [[ $status -eq 0 ]]; then
+        local installed_version
+        installed_version="$(docker exec "$CONTAINER" pi --version 2>&1 | head -n 1)"
         echo
+        [[ -n "$installed_version" ]] && echo "  Installed version: $installed_version"
+        [[ -n "$installed_version" ]] && echo
         echo "  pi has been updated successfully."
     else
         echo
         echo "  Update failed. Check the output above for errors."
     fi
+
+    return $status
 }
 
 # ── main loop ──────────────────────────────────────────────────────────────────
@@ -383,7 +394,7 @@ while true; do
     # Pause after output-producing actions so results aren't erased by clear.
     # Submenus (5, 6) handle their own flow — no extra pause needed.
     case "$choice" in
-        5|6|7|8|Q) ;;
+        5|6|7|Q) ;;
         *) echo; read -r -p "  Press Enter to return to menu" ;;
     esac
 done

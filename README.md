@@ -57,6 +57,7 @@ Run `./run.sh` (or `.\run.ps1`) to open the management menu:
 | **[5]** Backup management | Create, list, restore, or delete backups |
 | **[6]** Container management | Stop, remove, or view container status |
 | **[7]** Setup / switch profile | Re-run setup to manage profiles |
+| **[8]** Update pi | Force-install the latest published pi release inside the running container |
 
 ### First-Time Setup
 
@@ -65,9 +66,10 @@ Run `./run.sh` (or `.\run.ps1`) to open the management menu:
    - Building also starts the container automatically
 2. Run `./run.sh` (or `.\run.ps1`) to open the management menu
 3. *(Optional)* **[4]** to configure local LLM providers
-4. **[1]** to launch pi
-5. Inside pi, type `/login` to authenticate with your LLM provider
-6. Start coding!
+4. *(Optional)* **[8]** to update pi in-place to the newest published npm release
+5. **[1]** to launch pi
+6. Inside pi, type `/login` to authenticate with your LLM provider
+7. Start coding!
 
 ### Direct Script Access
 
@@ -82,6 +84,8 @@ You can also run individual scripts directly:
 ```
 
 On Windows PowerShell, use the `.ps1` versions of each script.
+
+Both the Docker image build and the update menu now install pi from npm with a forced global install (`npm install -g --force @mariozechner/pi-coding-agent@latest`) so rebuilt images and manual updates track the newest published release. Rebuilds and updates also print the detected pi version so you can confirm what is installed.
 
 ## Usage
 

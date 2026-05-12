@@ -6,11 +6,21 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/_config.sh"
 
+PI_PACKAGE_NAME='@mariozechner/pi-coding-agent'
+
 echo "Building Docker image: ${IMAGE_NAME}:${IMAGE_TAG}"
-docker build -t "${IMAGE_NAME}:${IMAGE_TAG}" .
+echo "Installing latest published pi package during build: ${PI_PACKAGE_NAME}@latest"
+docker build --pull --no-cache \
+    --build-arg PI_PACKAGE_NAME="$PI_PACKAGE_NAME" \
+    --build-arg PI_PACKAGE_VERSION="latest" \
+    -t "${IMAGE_NAME}:${IMAGE_TAG}" .
 
 if [ $? -eq 0 ]; then
     echo "✓ Image built successfully: ${IMAGE_NAME}:${IMAGE_TAG}"
+    image_version="$(docker run --rm "${IMAGE_NAME}:${IMAGE_TAG}" pi --version 2>&1 | head -n 1)"
+    if [[ -n "$image_version" ]]; then
+        echo "  Image pi version: $image_version"
+    fi
 else
     echo "✗ Build failed"
     exit 1
@@ -39,6 +49,10 @@ docker run -d \
 
 if [ $? -eq 0 ]; then
     echo "✓ Container started successfully"
+    container_version="$(docker exec "${CONTAINER_NAME}" pi --version 2>&1 | head -n 1)"
+    if [[ -n "$container_version" ]]; then
+        echo "  Container pi version: $container_version"
+    fi
     echo
     echo "Next steps:"
     echo "  1. Configure local providers (optional): ./run.sh → [4]"
